@@ -35,6 +35,10 @@ preferences {
     section("Eagle must have a static IP, default port is 80"){
         input name: "theAddr", type: "string", title: "ip:port", multiple: false, required: true, displayDuringSetup: true
     }
+    section("Automatically power cycle device when it starts to return errors"){
+        input name: "powerCycleEnabled", type: "bool", title: "Enabled?", defaultValue: false
+        input name: "powerCycleSwitch", type: "capability.switch", title: "Switch that the Eagle is plugged into"
+    }
 }
 
 def installed() {
@@ -74,6 +78,7 @@ def createChild() {
     
     if (child) {
 		log.warn "Device already exists"
+        subscribeToChild(child)
 	} else {
         try {
         	log.debug "attempting to create child device"
@@ -81,6 +86,7 @@ def createChild() {
 			// for some reason adding the map causes method signature error
 			//def newChild = addChildDevice("augoisms", "RainforestEagle", "${dni}", [name: "RainforestEagle", label: "Power Meter", isComponent: true])
             log.trace "created ${newChild.displayName} with id $dni"
+            subscribeToChild(child)
         }
         catch (Exception e) {
         	log.debug "error creating child device"
@@ -88,6 +94,44 @@ def createChild() {
         }
     	
 	}
+}
+
+def subscribeToChild(child){
+    // only subscribe if we've enabled auto power cycle
+    if (powerCycleEnabled) {
+        subscribe(child, "power", powerHandler)   
+    }
+}
+
+def powerHandler(evt) {
+    def currentPower = evt.value
+    //log.debug "Current Power: ${currentPower}"
+    
+    if (currentPower == "---") {
+        log.debug "Eagle is returning errors"
+        // only power cycle if we've previously received a successful value
+        // this will prevent an endless loop as the device takes time to boot up
+        if (state.successReceived == true) {
+            log.debug "power cycling device"
+            state.successReceived = false
+            powerCycleOff()
+            // wait 5 seconds then turn it back on
+            runIn(5, powerCycleOn)
+        }
+    } else {
+        // we received a successful result, reset flag
+        state.successReceived = true
+    }
+}
+
+def powerCycleOn() {
+    log.debug "turning on"
+    powerCycleSwitch.on()
+}
+
+def powerCycleOff() {
+    log.debug "turning off"
+    powerCycleSwitch.off()
 }
 
 // ========================================================
