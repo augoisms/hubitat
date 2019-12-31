@@ -47,13 +47,16 @@ metadata {
 	}
 }
 
+preferences {
+    input name: "isLogLevelDebug", type: "bool", title: "Show debug log level ?\n", defaultValue: "false", displayDuringSetup: true   
+}
+
 def installed() {
 	log.debug "RainforestEagle device installed"	
 	initialize()
 }
 
 def updated() {
-	unsubscribe()
 	unschedule()
 	initialize()
 }
@@ -62,18 +65,16 @@ def initialize() {
     schedule("0/20 * * * * ? *", refresh)
 }
 
-def refreshCallback(response) {
-	log.debug "refresh response"
-    //log.debug response.headers
-    
-    log.debug "status: ${response?.status}"
+def refreshCallback(response, data) {
+	logDebug "refresh response"   
+    logDebug "status: ${response?.status}"
     
     def successCodes = ["200","201","202"]
 	boolean success = successCodes.findAll{response?.status?.toString().contains(it)}
-    log.debug "success: $success"
+    logDebug "success: $success"
     
     if(success) {
-    	def json = parseJson(response.body)
+        def json = parseJson(response.getData())
 		addEagleData(json)
     } else {
     	error()
@@ -82,12 +83,9 @@ def refreshCallback(response) {
 }
 
 def refresh() {
-	log.debug "refresh()"
+	logDebug "refresh()"
     
     def settings = parent.getSettings(this)
-    //log.debug "settings"
-    //log.debug settings
-    
     def address = settings.theAddr
     def macId = settings.macId
     
@@ -101,23 +99,18 @@ def refresh() {
     </Command>"""
 
     try {
-    
-        def hubAction = new hubitat.device.HubAction([
-            method: "POST",
-            path: "/cgi-bin/post_manager",
-            headers: [
-                HOST: address,
-                "authorization": "Basic $encoded",
+        def postParams = [
+            uri: "http://${address}/cgi-bin/post_manager",
+		    requestContentType: 'application/xml',
+		    headers: [
+                "authorization": "Basic ${encoded}",
                 "Content-Type": "application/xml"
             ],
-            body: xmlBody],
-            device.deviceNetworkId,
-            [callback: refreshCallback]
-        )
-        //log.debug "hubAction"
-        //log.trace hubAction
-        log.debug "sending request"
-        sendHubCommand(hubAction)
+		    body : xmlBody
+        ]              
+        
+        logDebug "sending request"
+        asynchttpPost('refreshCallback', postParams)
     }
     catch (Exception e) {
         log.debug "Hit Exception $e on $hubAction"
@@ -126,12 +119,12 @@ def refresh() {
 
 // parse events into attributes
 def parse(String description) {
-	log.debug "Parsing '${description}'"
+	logDebug "Parsing '${description}'"
 }
 
 public addEagleData(json) {
 
-	log.trace "Adding data from Eagle"
+	logDebug "Adding data from Eagle"
 
     def data = json.InstantaneousDemand
     
@@ -177,7 +170,7 @@ private sendPowerEvent(time, value, units, isLatest = false) {
 		descriptionText: "${value} ${units}"
 	]
 
-	log.debug "sending event: ${eventData}"
+	logDebug "sending event: ${eventData}"
 	sendEvent(eventData)
 }
 
@@ -187,4 +180,10 @@ def parseJson(String s) {
 
 private Integer convertHexToInt(hex) {
     return new BigInteger(hex[2..-1], 16)
+}
+
+void logDebug(str) {
+    if (isLogLevelDebug) {
+        log.debug str
+    }
 }
