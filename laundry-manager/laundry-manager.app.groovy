@@ -10,7 +10,8 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  V1.0.0 - Initial version
+ *  v1.0.0 - Initial version
+ *  v1.0.1 - Made washer, dryer, and reset button optional
  *
  */
 definition(
@@ -25,8 +26,8 @@ definition(
 
 preferences {
 	section("Select machines") {
-		input "washerMeter", "capability.powerMeter", title: "Washer Power Meter", required: true
-        input "dryerMeter", "capability.powerMeter", title: "Dryer Power Meter", required: true
+		input "washerMeter", "capability.powerMeter", title: "Washer Power Meter"
+        input "dryerMeter", "capability.powerMeter", title: "Dryer Power Meter"
 		input "resetButton", "capability.pushableButton", title: "Reset Button"
 	}
 	section( "Notifications" ) {
@@ -52,10 +53,16 @@ def uninstalled() {
 }
 
 def init() {
-	subscribe(washerMeter, "power", washerPowerHandler)
-    subscribe(dryerMeter, "power", dryerPowerHandler) 
-	subscribe(resetButton, "pushed", buttonHandler)
-    
+    if (washerMeter) {
+        subscribe(washerMeter, "power", washerPowerHandler)
+    }
+    if (dryerMeter) {
+        subscribe(dryerMeter, "power", dryerPowerHandler) 
+    }
+    if (resetButton) {
+        subscribe(resetButton, "pushed", buttonHandler)
+    }
+	 
     createChildren()
 }
 
@@ -66,8 +73,13 @@ def init() {
 def createChildren() {
     log.trace "creating Laundry Manager children"
     
-    createChild("laundry-machine-washer", "Laundry Washer")
-    createChild("laundry-machine-dryer", "Laundry Dryer")
+    if (washerMeter) {
+        createChild("laundry-machine-washer", "Laundry Washer")
+    }
+    
+    if (dryerMeter) {
+        createChild("laundry-machine-dryer", "Laundry Dryer")
+    }
 }
 
 def createChild(dni, label) {
