@@ -12,6 +12,7 @@
  *
  *  v1.0.0 - Initial version
  *  v1.0.1 - Made washer, dryer, and reset button optional
+ *  v1.0.2 - Allow multiple notification devices
  *
  */
 definition(
@@ -32,7 +33,7 @@ preferences {
 	}
 	section( "Notifications" ) {
 		input "sendPushMessage", "enum", title: "Send a push notification?", options: ["Yes", "No"], required: false
-		input "notificationDevice", "capability.notification", title: "Notification device", required: false
+		input "notificationDevices", "capability.notification", title: "Notification device", required: false, multiple: true
 		input "repeat", "bool", title: "Repeat notifications?"
 		input "repeatInterval", "number", title: "Repeat interval (minutes)", defaultValue: 15
         input "modes", "mode", title: "Only send in specific modes", multiple: true, required: false
@@ -183,8 +184,10 @@ def statusCheck(device, deviceName, handlerName) {
 private send(msg) {
 	def modeOkay = !modes || modes.contains(location.mode)
     if (sendPushMessage != "No" && modeOkay) {
-		log.debug("sending push message")
-		notificationDevice.deviceNotification(msg)
+		log.debug("sending push message")		
+        notificationDevices.each{ device -> 
+            device.deviceNotification(msg)
+        }
 	}
     
     log.debug msg
