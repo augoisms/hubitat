@@ -10,7 +10,8 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  V1.0.0 - Initial version
+ *  1.0.1 (aaron) - added icons, change uppercasing of current state
+ *  1.0.0 - Initial version
  *
  */
 metadata {
@@ -72,7 +73,7 @@ def parseWattsForStatus(watts) {
 	// get the current status
 	def currentStatus = device.currentValue("status") ?: "";
     // check if running to save for later
-    if(currentStatus == "running") {
+    if(currentStatus == "Running") {
         state.wasRunning = true;
     }
     logDebug "parseWattsForStatus() > wasRunning: ${state.wasRunning}";
@@ -127,18 +128,22 @@ def parseWattsForStatus(watts) {
     
     def finalState = "";
     if(isIdle && state.wasRunning) {
-        finalState = "finished"
-        sendEvent(name: "status", value: finalState)
+        finalState = "Finished"
+        img = "laundry-off.png"
         switchOn()
     } else if (isIdle) {
-        finalState = "idle"
-        sendEvent(name: "status", value: finalState)
+        finalState = "Idle"
+        img = "laundry-off.png"
         switchOff()
     } else {
-        finalState = "running"
-        sendEvent(name: "status", value: finalState)
+        finalState = "Running"
+        img = "laundry-on.png"
         switchOff()
     }
+    img = "https://raw.githubusercontent.com/PrayerfulDrop/Hubitat/master/support/images/${img}"
+    html = "<style>img.wdImage { max-width:80%;height:auto;}div#wdImgWrapper {width=100%}div#wdWrapper {font-size:13px;margin: 30px auto; text-align:center;}</style><div id='wdWrapper'>"
+    html += "<div id='wdWrapper'><center><img src='${img}' class='wdImage'><br>${finalState}</center></div></div>"
+    sendEvent(name: "status", value: html)
     
     logDebug "parseWattsForStatus() > finalState: " + finalState;
 }
