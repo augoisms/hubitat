@@ -10,9 +10,10 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  v1.0.0 - Initial version
- *  v1.0.1 - Made washer, dryer, and reset button optional
- *  v1.0.2 - Allow multiple notification devices
+ *  1.0.3 - Added TTS notifications, speaker selection, volume/restore, restrictions seperation between pushover and TTS, change status back to Idle after a given amount of time
+ *  1.0.2 - Allow multiple notification devices
+ *  1.0.1 - Made washer, dryer, and reset button optional
+ *  1.0.0 - Initial version
  *
  */
 definition(
@@ -26,17 +27,30 @@ definition(
 )
 
 preferences {
-	section("Select machines") {
+	section("Select Machines:") {
 		input "washerMeter", "capability.powerMeter", title: "Washer Power Meter"
         input "dryerMeter", "capability.powerMeter", title: "Dryer Power Meter"
 		input "resetButton", "capability.pushableButton", title: "Reset Button"
+        input "resetAuto","bool", defaultValue: false, title: "Auto-reset machines back to idle?"
+        if(resetAuto) input "resetMin", defaultValue: "60", title: "Number of minutes before reseting?"
 	}
-	section( "Notifications" ) {
-		input "sendPushMessage", "enum", title: "Send a push notification?", options: ["Yes", "No"], required: false
-		input "notificationDevices", "capability.notification", title: "Notification device", required: false, multiple: true
+	section( "Notifications:" ) {
+        input(name: "speechmode", type: "bool", defaultValue: "false", title: "Use Speech Speaker(s) for TTS?", description: "Speech Speaker(s)?", submitOnChange: true)
+        if (speechmode) {
+            input "speechspeaker", "capability.speechSynthesis", title: "Choose speaker(s)", required: false, multiple: true, submitOnChange: true
+          	// Master Volume settings
+			input "speakervolume", "number", title: "Notification Volume Level:", description: "0-100%", required: false, defaultValue: "75", submitOnChange: true
+			input "speakervolRestore", "number", title: "Restore Volume Level:", description: "0-100", required: false, defaultValue: "60", submitOnChange: true
+        }
+		input "sendPushMessage", "enum", title: "Send push notifications?", options: ["Yes", "No"], required: false
+        if(sendPushMessage)	input "notificationDevices", "capability.notification", title: "Notification device(s)", required: false, multiple: true
 		input "repeat", "bool", title: "Repeat notifications?"
-		input "repeatInterval", "number", title: "Repeat interval (minutes)", defaultValue: 15
-        input "modes", "mode", title: "Only send in specific modes", multiple: true, required: false
+		if(repeat) input "repeatInterval", "number", title: "Repeat interval (minutes)", defaultValue: 15
+    }
+    section("Restrictions:") {
+        
+       input "modes", "mode", title: "Pushover Notifications only send during specific modes?", multiple: true, required: false
+       input "ttsmodes", "mode", title: "TTS Notifications only send during specific modes?", multiple: true, required: false
     }
 }
 
@@ -127,13 +141,13 @@ def buttonHandler(evt) {
 	log.debug "button pushed"
     
     def washer = getChildDevice("laundry-machine-washer")
-    if(washer.currentValue("status") == "finished") {
+    if(washer.currentValue("status") == "Finished") {
     	log.debug "resetting washer"
         washer.resetFinished()
     }
     
     def dryer = getChildDevice("laundry-machine-dryer")
-    if(dryer.currentValue("status") == "finished") {
+    if(dryer.currentValue("status") == "Finished") {
     	log.debug "resetting dryer"
         dryer.resetFinished()
     }
@@ -170,9 +184,13 @@ def dryerPowerHandler(evt) {
 def statusCheck(device, deviceName, handlerName) {
 	def status = device.currentValue("status")
   
-    if (status == "finished") {
+    if (status == "Finished") {
     	// send notification
-        send("${deviceName} is finished")
+        send("The ${deviceName} has finished a load of laundry.")
+        if(resetAuto) {
+            runIn(resetMin.toInteger()*60, dryer.resetFinished)
+            runIn(resetMin.toInteger()*60, washer.resetFinished)
+        }
         // schedule repeat notification
         if(repeat) {
         	log.debug "scheduling a repeat notification"
@@ -182,6 +200,7 @@ def statusCheck(device, deviceName, handlerName) {
 }
 
 private send(msg) {
+    def modeTTSOkay = !ttsmodes || ttsmodes.contains(location.mode)
 	def modeOkay = !modes || modes.contains(location.mode)
     if (sendPushMessage != "No" && modeOkay) {
 		log.debug("sending push message")		
@@ -189,6 +208,32 @@ private send(msg) {
             device.deviceNotification(msg)
         }
 	}
-    
+    if (speechmode != "No" && modeTTSOkay) {
+			try {
+                speechspeaker.initialize() 
+                if (logEnable) log.debug "Initializing Speech Speaker"
+                pauseExecution(2500)
+            }
+            catch (any) { if(logEnable) log.debug "Speech device doesn't support initialize command" }
+            try { 
+                speechspeaker.setVolume(speakervolume)
+                if (logEnable) log.debug "Setting Speech Speaker to volume level: ${speakervolume}"
+				pauseExecution(2000)
+            }
+            catch (any) { if (logEnable) log.debug "Speech speaker doesn't support volume level command" }
+                
+			if (logEnable) log.debug "Sending alert to Google and Speech Speaker(s)"
+            alertmsg = alertmsg.toLowerCase()
+            speechspeaker.speak(msg)
+            
+            try {
+				if (speakervolRestore) {
+					pauseExecution(atomicState.speechDuration2)
+					speechspeaker.setVolume(speakervolRestore)	
+                    if (logEnable) log.debug "Restoring Speech Speaker to volume level: ${speakervolRestore}"
+                }
+            }
+                catch (any) { if (logEnable) log.debug "Speech speaker doesn't support restore volume command" }
+    }
     log.debug msg
 }
