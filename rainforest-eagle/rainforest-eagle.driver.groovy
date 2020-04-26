@@ -1,189 +1,242 @@
 /**
- *  Rainforest Eagle - Device handler, requires Rainforest Eagle Manager
+ *  Rainforest Eagle Driver - Implements the uploader API
  *
- *  Copyright 2017 Justin Walker
+ * Copyright (c) 2020 Justin Walker
  *
- *  heavily adapted from wattvision device type
- *  https://github.com/SmartThingsCommunity/SmartThingsPublic/blob/master/devicetypes/smartthings/wattvision.src/wattvision.groovy
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- *  in compliance with the License. You may obtain a copy of the License at:
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
- *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
- *  for the specific language governing permissions and limitations under the License.
+ *
+ *  V1.0.0 - Initial version
  *
  */
 
 metadata {
+    definition(name: "Rainforest Eagle", namespace: "augoisms", author: "Justin Walker") {
+        capability "PowerMeter"
+        capability "EnergyMeter"
+        capability "Sensor"
 
-	definition(name: "RainforestEagle", namespace: "augoisms", author: "Justin Walker") {
-		capability "Power Meter"
-		capability "Refresh"
-		capability "Sensor"
-        
-        attribute "lastUpdated", "String"
-	}
-
-	tiles {
-
-		valueTile("power", "device.power", width: 2, height: 2) {
-			state "default", label: '${currentValue} W'
-		}
-
-		standardTile("refresh", "device.power", inactiveLabel: true, decoration: "flat") {
-			state "default", label: '', action: "refresh.refresh", icon: "st.secondary.refresh"
-		}
-        
-        valueTile("lastUpdated", "device.lastUpdated", width: 1, height: 1, decoration: "flat") {
-        	state "default", label:'${currentValue}'
-	    }
-
-		main "power"
-		details(["power", "refresh", "lastUpdated"])
-
-	}
+        command "resetEnergy"
+    }
 }
 
 preferences {
-    input name: "isLogLevelDebug", type: "bool", title: "Show debug log level ?\n", defaultValue: "false", displayDuringSetup: true   
+    input name: "eagleIP", type: "string", title:"<b>Eagle IP Address</b>", description: "<div><i>Please use a static IP.</i></div><br>", required: true
+    input name: "reportWatts", type: "bool", title:"<b>Report Power in Watts?</b>", description: "<div><i>Default reporting is in kW. Energy is always in kWh.</i></div><br>", defaultValue: true
+    input name: "autoResetEnergy", type: "enum", title: "<b>Automatically Reset Energy</b>", description: "<div><i>Reset energy on the specified day every month.</i></div></br>", options: daysOptions(), defaultValue: "Disabled"
+    input name: "loggingEnabled", type: "bool", title: "<b>Enable Logging?</b>", description: "<div><i>Automatically disables after 30 minutes.</i></div><br>", defaultValue: false
 }
 
 def installed() {
-	log.debug "RainforestEagle device installed"	
-	initialize()
+    log.debug "RainforestEagle device installed"
+    installedUpdated()
 }
 
 def updated() {
-	unschedule()
-	initialize()
+    installedUpdated()
 }
 
-def initialize() {
-    schedule("0/20 * * * * ? *", refresh)
-}
+void installedUpdated() {
+    unschedule()
+    setNetworkAddress()
+    if (settings.loggingEnabled) runIn(1800, disableLogging) // 30 minutes
+    scheduleTimeout()
 
-def refreshCallback(response, data) {
-	logDebug "refresh response"   
-    logDebug "status: ${response?.status}"
-    
-    def successCodes = ["200","201","202"]
-	boolean success = successCodes.findAll{response?.status?.toString().contains(it)}
-    logDebug "success: $success"
-    
-    if(success) {
-        def json = parseJson(response.getData())
-		addEagleData(json)
-    } else {
-    	error()
-    }
-    
-}
-
-def refresh() {
-	logDebug "refresh()"
-    
-    def settings = parent.getSettings(this)
-    def address = settings.theAddr
-    def macId = settings.macId
-    
-    def pre = "${settings.cloudId}:${settings.macId}"
-    def encoded = pre.bytes.encodeBase64()
-    
-    def xmlBody = """<Command>
-    <Name>get_instantaneous_demand</Name>
-    <MacId>0x${settings.macId}</MacId>
-    <Format>JSON</Format>
-    </Command>"""
-
-    try {
-        def postParams = [
-            uri: "http://${address}/cgi-bin/post_manager",
-		    requestContentType: 'application/xml',
-		    headers: [
-                "authorization": "Basic ${encoded}",
-                "Content-Type": "application/xml"
-            ],
-		    body : xmlBody
-        ]              
-        
-        logDebug "sending request"
-        asynchttpPost('refreshCallback', postParams)
-    }
-    catch (Exception e) {
-        log.debug "Hit Exception $e on $hubAction"
+    // schedule auto reset
+    if (autoResetEnergy && autoResetEnergy != "Disabled") {
+        schedule("0 0 0 ${autoResetEnergy} * ? *", "resetEnergy")
     }
 }
 
 // parse events into attributes
 def parse(String description) {
-	logDebug "Parsing '${description}'"
+    unschedule("timeout")
+
+    logDebug "Parsing '${description}'"
+
+    def msg = parseLanMessage(description)   
+    def body = new XmlSlurper().parseText(new String(msg.body))
+    logDebug groovy.xml.XmlUtil.escapeXml(msg.body) 
+
+    if (body?.InstantaneousDemand?.Demand.text()) { 
+        parseInstantaneousDemand(body.InstantaneousDemand)
+    }
+
+    if (body?.DeviceInfo?.DeviceMacId.text()) { 
+        parseDeviceInfo(body.DeviceInfo)
+    }
+
+    if (body?.NetworkInfo?.DeviceMacId.text()) { 
+        parseNetworkInfo(body.NetworkInfo)
+    }
+
+    if (body?.ConnectionStatus?.DeviceMacId.text()) { 
+        parseNetworkInfo(body.ConnectionStatus)
+    }
+
+    if (body?.CurrentSummationDelivered?.SummationDelivered.text()) {
+        // EAGLE 100
+        parseCurrentSummation(body.CurrentSummationDelivered)
+    }
+
+    if (body?.CurrentSummation?.SummationDelivered.text()) {
+        // EAGLE 200
+        parseCurrentSummation(body.SummationDelivered)
+    }
+
+    scheduleTimeout()
 }
 
-public addEagleData(json) {
-
-	logDebug "Adding data from Eagle"
-
-    def data = json.InstantaneousDemand
-    
-    int demand = convertHexToInt(data.Demand)
-    int multiplier = convertHexToInt(data.Multiplier)
-    int divisor = convertHexToInt(data.Divisor)
-    
-    // we're not using the devisor bc I can't figure out how
-    // to get the tiles to now round the decimal places
-    //def value = (demand * multiplier) / divisor
-    def value = (demand * multiplier)
-    
-    def valueString = String.valueOf(value)
-    
-    sendPowerEvent(new Date(), valueString, 'W', true)    
-    
-    // update time
-	def timeData = [
-    	date: new Date(),
-        value: new Date().format("yyyy-MM-dd h:mm", location.timeZone),
-        name: "lastUpdated"//,
-        //isStateChange: true
-    ]
-    sendEvent(timeData)
-
+void resetEnergy() {
+    // reset engery starting point
+    state.remove("energyStart")
+    state.remove("energyStartTimestamp")
+    sendEvent(name: "energy", value: 0, unit: "kWh")
 }
 
-public error() {
-	// there was an error retrieving data
-    // clear out the value
-    sendPowerEvent(new Date(), '---', 'W', true)    
+void setNetworkAddress() {
+    // Setting Network Device Id
+    def dni = convertIPtoHex(settings.eagleIP)
+    if (device.deviceNetworkId != "$dni") {
+        device.deviceNetworkId = "$dni"
+        log.debug "Device Network Id set to ${device.deviceNetworkId}"
+    }
+
+    // set hubitat endpoint
+    state.hubUrl = "http://${location.hub.localIP}:39501"
 }
 
-private sendPowerEvent(time, value, units, isLatest = false) {
+void parseInstantaneousDemand(InstantaneousDemand) {
+    logDebug "Adding InstantaneousDemand"
+    
+    int demand = convertHexToInt(InstantaneousDemand.Demand.text())
 
-	def eventData = [
-		date           : time,
-		value          : value,
-		name           : "power",
-		displayed      : isLatest,
-		//isStateChange  : isLatest,
-		description    : "${value} ${units}",
-		descriptionText: "${value} ${units}"
-	]
+    int multiplier = convertHexToInt(InstantaneousDemand.Multiplier.text())
+    if (multiplier == 0) { multiplier = 1 }
 
-	logDebug "sending event: ${eventData}"
-	sendEvent(eventData)
+    int divisor = convertHexToInt(InstantaneousDemand.Divisor.text())
+    if (divisor == 0) { divisor = 1 }
+    
+    def value = (demand * multiplier) / divisor
+    value = reportWatts ? Math.round(value * 1000) : value
+    def unit = reportWatts ? "W" : "kW"
+    
+    logDebug "Current Demand: ${value}"
+    
+    sendEvent(name: "power", value: value, unit: unit)
 }
 
-def parseJson(String s) {
-	new groovy.json.JsonSlurper().parseText(s)
+void parseDeviceInfo(deviceInfo) {
+    updateDeviceData("zigbeeMacId", deviceInfo.DeviceMacId.text())
+    updateDeviceData("installCode", deviceInfo.InstallCode.text())
+    updateDeviceData("linkKey", deviceInfo.LinkKey.text())
+    updateDeviceData("fwVersion", deviceInfo.FWVersion.text())
+    updateDeviceData("hwVersion", deviceInfo.HWVersion.text())
+    updateDeviceData("imageType", deviceInfo.ImageType.text())
+    updateDeviceData("modelId", deviceInfo.ModelId.text())
+    updateDeviceData("dateCode", deviceInfo.DateCode.text())
+    updateDeviceData("installCode", deviceInfo.InstallCode.text())
+}
+
+void parseNetworkInfo(networkInfo) {
+    if (networkInfo.Protocol.text()) {
+        // Eagle 200
+        updateDeviceData("meterMacId", networkInfo.MeterMacId.text())
+    }
+    else {
+        // Eagle 100   
+        updateDeviceData("meterMacId", networkInfo.CoordMacId.text())    
+    }    
+    state.connectionStatus = networkInfo.Status.text()
+    state.channel = networkInfo.Channel.text()
+    state.connectionStrength = convertHexToInt(networkInfo.LinkStrength.text()) + "%"
+}
+
+void parseCurrentSummation(summation) {
+    int delivered = convertHexToInt(summation.SummationDelivered.text())
+    int received = convertHexToInt(summation.SummationReceived.text())
+
+    // TimeStamp - 8 hex digits 
+    // UTC Time (offset in seconds from 00:00:00 01Jan2000) when data received from meter.
+    int timestamp = convertHexToInt(summation.TimeStamp.text())
+    def dateString = utc2000ToDate(timestamp) 
+
+    int multiplier = convertHexToInt(summation.Multiplier.text())
+    if (multiplier == 0) { multiplier = 1 }
+
+    int divisor = convertHexToInt(summation.Divisor.text())
+    if (divisor == 0) { divisor = 1 }
+
+    def deliveredValue = (delivered * multiplier) / divisor
+    def receivedValue = (received * multiplier) / divisor
+
+    state.summationDelivered = deliveredValue
+    state.summationReceived = receivedValue
+    state.summationTimestamp = dateString
+    
+    if (state.energyStart) {
+        // calculate energy
+        def totalEnergy = deliveredValue - state.energyStart
+        // round to 2 decimal places
+        totalEnergy = Math.round(totalEnergy * 100) / 100
+        sendEvent(name: "energy", value: totalEnergy, unit: "kWh")
+    }
+    else {
+        // save value
+        state.energyStart = deliveredValue
+        state.energyStartTimestamp = dateString
+        sendEvent(name: "energy", value: 0, unit: "kWh")
+    }
+}
+
+void updateDeviceData(String key, String value) {
+    if (device.data[key] != value) {
+        updateDataValue(key, value)
+    }
+}
+
+void timeout() {
+    def unit = reportWatts ? "W" : "kW"
+    sendEvent(name: "power", value: "0", unit: unit)
+}
+
+void scheduleTimeout() {
+    // if we don't receive any messages within 1 minute
+    // set power to 0
+    runIn(60, "timeout")
 }
 
 private Integer convertHexToInt(hex) {
     return new BigInteger(hex[2..-1], 16)
 }
 
+private String convertIPtoHex(ipAddress) { 
+    String hex = ipAddress.tokenize( '.' ).collect {  String.format( '%02x', it.toInteger() ) }.join()
+    return hex.toUpperCase()
+
+}
+
+private String utc2000ToDate(int seconds) {
+    int unix200Time = 946684800
+    // <UNIX time> = <2000 time> + <January 1, 2000 UNIX time>
+    int unixSeconds = seconds + unix200Time
+    long unixMilliseconds = unixSeconds * 1000L
+    new Date(unixMilliseconds).format("yyyy-MM-dd h:mm", location.timeZone)
+}
+
+void disableLogging() {
+	log.info 'Logging disabled.'
+	device.updateSetting('loggingEnabled',[value:'false',type:'bool'])
+}
+
 void logDebug(str) {
-    if (isLogLevelDebug) {
+    if (loggingEnabled) {
         log.debug str
     }
 }
+
+def daysOptions() { ["Disabled","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31"] }

@@ -2,6 +2,8 @@
 
 This driver is for the original Eagle (4 lights)
 
+DEPRECATED: PLEASE USE THE LATEST DRIVER THAT IMPLEMENTS THE UPLOADER API
+
 ## Notes
 
 - Disable (uncheck) `Remote Management` and `Security` (Settings > Eagle > Cog)
