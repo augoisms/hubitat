@@ -4,6 +4,7 @@
   "version": "1.0.2",
   "minimumHEVersion": "2.2.0",
   "dateReleased": "2020-02-15",
+  "communityLink": "https://community.hubitat.com/t/release-laundry-manager/30614",
   "drivers": [
     {
       "id": "c4342aa7-bfe9-4727-977f-27971d79ea8d",

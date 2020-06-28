@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "minimumHEVersion": "2.2.0",
   "dateReleased": "2020-04-26",
+  "communityLink": "https://community.hubitat.com/t/release-rainforest-eagle/38883",
   "drivers": [
     {
       "id": "414ba391-409c-4c42-9d7a-e7a249a7c916",

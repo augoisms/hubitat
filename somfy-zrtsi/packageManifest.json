@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "minimumHEVersion": "2.2.0",
   "dateReleased": "2020-05-16",
+  "communityLink": "https://community.hubitat.com/t/release-somfy-zrtsi/40998",
   "drivers": [
     {
       "id": "0c5c5fb6-aa56-4486-a329-a63858e0ea34",
