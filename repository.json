@@ -1,0 +1,30 @@
+{
+  "author": "Justin Walker (augoisms)",
+  "gitHubUrl": "https://github.com/augoisms/hubitat",
+  "packages": [
+    {
+      "name": "Somfy ZRTSI",
+      "category": "Integrations",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/somfy-zrtsi/packageManifest.json",
+      "description": "A driver for the Somfy ZRTSI"
+    },
+    {
+      "name": "Rainforest Eagle",
+      "category": "Integrations",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/rainforest-eagle/packageManifest.json",
+      "description": "A driver for the Rainfoest Eagle"
+    },
+    {
+      "name": "SunCalc",
+      "category": "Integrations",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/sun-calc/packageManifest.json",
+      "description": "A driver that calculates the position of the sun"
+    },
+    {
+      "name": "Laundry Manager",
+      "category": "Convenience",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/laundry-manager/packageManifest.json",
+      "description": "Monitors the power consumption of a washer & dryer and alerts you upon cycle completion"
+    }
+  ]
+}
