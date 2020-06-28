@@ -1,0 +1,16 @@
+{
+  "packageName": "SunCalc",
+  "author": "Justin Walker (augoisms)",
+  "version": "1.0.0",
+  "minimumHEVersion": "2.2.0",
+  "dateReleased": "2019-07-05",
+  "drivers": [
+    {
+      "id": "818831c7-66b6-460d-81aa-f12b49f66f03",
+      "name": "SunCalc Driver",
+      "namespace": "augoisms",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/sun-calc/sun-calc.driver.groovy",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "packageName": "Laundry Manager",
+  "author": "Justin Walker (augoisms)",
+  "version": "1.0.2",
+  "minimumHEVersion": "2.2.0",
+  "dateReleased": "2020-02-15",
+  "drivers": [
+    {
+      "id": "c4342aa7-bfe9-4727-977f-27971d79ea8d",
+      "name": "Laundry Machine",
+      "namespace": "augoisms",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/laundry-manager/laundry-machine.driver.groovy",
+      "required": true
+    }
+  ],
+  "apps": [
+    {
+      "id": "01a08de5-dc79-4f5e-9c56-db3ce4f23ed1",
+      "name": "Laundry Manager",
+      "namespace": "augoisms",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/laundry-manager/laundry-manager.app.groovy",
+      "required": true,
+      "oauth": false
+    }
+  ]
+}
