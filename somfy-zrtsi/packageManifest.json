@@ -1,0 +1,16 @@
+{
+  "packageName": "Somfy ZRTSI",
+  "author": "Justin Walker (augoisms)",
+  "version": "1.0.0",
+  "minimumHEVersion": "2.2.0",
+  "dateReleased": "2020-05-16",
+  "drivers": [
+    {
+      "id": "0c5c5fb6-aa56-4486-a329-a63858e0ea34",
+      "name": "Somfy ZRTSI",
+      "namespace": "augoisms",
+      "location": "https://github.com/augoisms/hubitat/raw/master/somfy-zrtsi/somfy-zrtsi.driver.groovy",
+      "required": true
+    }
+  ]
+}
