@@ -1,0 +1,17 @@
+{
+  "packageName": "WeatherFlow Lite",
+  "author": "Justin Walker (augoisms)",
+  "version": "1.0.0",
+  "minimumHEVersion": "2.2.0",
+  "dateReleased": "2020-07-06",
+  "communityLink": "https://community.hubitat.com/t/release-weatherflow-lite/44674",
+  "drivers": [
+    {
+      "id": "4cdd34af-e2da-4109-9c45-67511e0325eb",
+      "name": "WeatherFlow Lite",
+      "namespace": "augoisms",
+      "location": "https://raw.githubusercontent.com/augoisms/hubitat/master/weatherflow/weatherflow.driver.groovy",
+      "required": true
+    }
+  ]
+}
