@@ -12,6 +12,7 @@
  *
  *  v1.0.0 - initial version (2020-07-06)
  *  v1.0.1 - added strikeDistance (2020-07-08)
+ *  v1.0.2 - initialize strike attrs (2020-07-09)
  *
  */
 
@@ -442,6 +443,10 @@ void parseObservation(Map response) {
             logDebug "${field}: ${windDirection.value} ${windDirection.unit}"
         }        
     }
+
+    // init strike attributes so that they are available
+    if (device.currentValue('strikeDetected') == null) { sendEvent(name: 'strikeDetected', value: 0) }
+    if (device.currentValue('strikeDistance') == null) { sendEvent(name: 'strikeDistance', value: 0) }
 }
 
 // summary is undocumented and therefore not guaranteed, however WeatherFlow recognizes people are using these values
