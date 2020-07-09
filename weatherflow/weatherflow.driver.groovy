@@ -10,7 +10,8 @@
  *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  v1.0.0 - initial version
+ *  v1.0.0 - initial version (2020-07-06)
+ *  v1.0.1 - added strikeDistance (2020-07-08)
  *
  */
 
@@ -33,6 +34,7 @@ metadata {
         attribute 'precipitationType', 'enum', ['none', 'rain', 'hail', 'mix']
         attribute 'solarRadiation', 'number'
         attribute 'strikeDetected', 'number'
+        attribute 'strikeDistance', 'number'
         attribute 'windChill', 'number'
         attribute 'windDirection', 'string'
         attribute 'windSpeed', 'number'
@@ -51,6 +53,7 @@ metadata {
             input name: 'unitWindSpeed', type: 'enum', title: '<b>Unit - Wind Speed</b>', required: true, options: ['mph': 'Miles (mph)', 'kph': 'Kilometers (kph)', 'kn': 'Knots', 'm/s': 'Meters (m/s)'], defaultValue: 'mph'
             input name: 'unitPressure', type: 'enum', title: '<b>Unit - Pressure</b>', required: true, options: ['mb': 'Millibars (mb)', 'inHg': 'Inches of mercury (inHg)'], defaultValue: 'inHg'
             input name: 'unitRain', type: 'enum', title: '<b>Unit - Rain</b>', required: true, options: ['in': 'Inches (in)', 'mm': 'Millimeters (mm)'], defaultValue: 'in'
+            input name: 'unitDistance', type: 'enum', title: '<b>Unit - Distance</b>', required: true, options: ['mi': 'Miles (mi)', 'km': 'Kilometers (km)'], defaultValue: 'mi'
         }
 
 		input name: 'logEnable', type: 'bool', title: 'Enable debug logging', defaultValue: false
@@ -132,8 +135,7 @@ def parse(String description) {
                 logDebug 'precipitationType: rain'
                 break
             case 'evt_strike':
-                sendEvent(name: 'strikeDetected', vaue: response.evt[0])
-                logDebug 'strikeDetected'
+                parseStrikeEvent(response)
                 break
             case 'ack':
             case 'connection_opened':
@@ -292,6 +294,12 @@ void requestData() {
 /// data parsing
 ///
 
+@Field static Map EVT_STRIKE = [
+    0: 'epoch',    // seconds utc,
+    1: 'distance', // km
+    2: 'energy'
+]
+
 @Field static Map OBS_AIR = [
     0:  'epoch',                             // seconds utc
     1:  'station_pressure',                  // mb
@@ -347,6 +355,13 @@ void requestData() {
     20: 'local_day_rain_accumulation_final', // mm (rain check)
     21: 'precipitation_analysis_type'        // 0 = none, 1 = rain check with user display on, 2 = rain check with user display off
 ]
+
+void parseStrikeEvent(Map response) {
+    Map strikeDistance = formatDistance(response.evt[1])
+    sendEvent(name: 'strikeDetected', value: response.evt[0])
+    sendEvent(name: 'strikeDistance', value: strikeDistance.value, unit: strikeDistance.unit)
+    logDebug "strikeDetected: ${strikeDistance.value} ${strikeDistance.unit}"
+}
 
 void parseObservation(Map response) {
 
@@ -458,8 +473,16 @@ void parseSummary(Map response) {
 /// formatters
 ///
 
+Map formatDistance(Integer value) {
+    Boolean metric = (settings.unitDistance == 'km')
+    return [
+        value: metric ? value : value / 1.609344,
+        unit: metric ? 'km' : 'mi'
+    ]
+}
+
 Map formatPrecipitationAmount(BigDecimal value) {
-    Boolean inches = (settings.unitRain) == 'in'
+    Boolean inches = (settings.unitRain == 'in')
     return [
         value: inches ? value / 25.4 : value,
         unit: inches ? 'in' : 'mm'
@@ -580,7 +603,8 @@ void logDebug(str) {
 }
 
 void logsOff() {
-    updateSetting('logEnable', false)
+    log.info 'Logging disabled.'
+    device.updateSetting('logEnable',[value:'false',type:'bool'])
 }
 
 BigDecimal round3(BigDecimal value) {

@@ -1,9 +1,10 @@
 {
   "packageName": "WeatherFlow Lite",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minimumHEVersion": "2.2.0",
   "dateReleased": "2020-07-06",
+  "releaseNotes": "Added strikeDistance attribute",
   "communityLink": "https://community.hubitat.com/t/release-weatherflow-lite/44674",
   "drivers": [
     {
