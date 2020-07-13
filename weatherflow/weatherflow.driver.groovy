@@ -13,6 +13,7 @@
  *  v1.0.0 - initial version (2020-07-06)
  *  v1.0.1 - added strikeDistance (2020-07-08)
  *  v1.0.2 - initialize strike attrs (2020-07-09)
+ *  v1.0.3 - added health check (2020-07-13)
  *
  */
 
@@ -76,14 +77,16 @@ void updated() {
     removeDataValue('devices')
     removeDataValue('device_agl')
     removeDataValue('station_elevation')
+    state.clear()
 
     //Unschedule any existing schedules
-    unschedule()   
+    unschedule()
+
+    // perform health check every 5 minutes
+    runEvery5Minutes('healthCheck')   
 
     // disable logs in 30 minutes
     if (settings.logEnable) runIn(1800, logsOff) 
-
-    state.clear()
 
     initialize()
 }
@@ -91,8 +94,11 @@ void updated() {
 void initialize() {
     log.info 'initialize()'
 
+    unschedule(initialize)
+
     // close websocket
     interfaces.webSocket.close()
+    pauseExecution(1000)
 
     if (!connectionValidated()) {
         log.warn 'Connection not validated. Cannot initialized.'
@@ -105,12 +111,10 @@ void initialize() {
     
     try {
         // connect webSocket to weatherflow
-        if (state.connection != 'connected') { state.connection = 'connecting' }
         interfaces.webSocket.connect("wss://ws.weatherflow.com/swd/data?api_key=${apiKey}")
     } 
     catch (e) {
-        if (logEnable) log.debug "initialize error: ${e.message}"
-        log.error 'webSocket connect failed'
+        log.error "webSocket.connect failed: ${e.message}"
     }
 }
 
@@ -143,7 +147,7 @@ def parse(String description) {
                 logDebug "response type: ${response.type}"
                 break
             default:
-                log.warn "Unhandled event type: ${response.type}"
+                log.warn "Unhandled event: ${response}"
                 break
         }
 
@@ -151,6 +155,7 @@ def parse(String description) {
     }  
     catch(e) {
         log.error "Failed to parse json e = ${e}"
+        log.debug description 
         return
     }
 }
@@ -239,16 +244,16 @@ Map getStationDevices() {
 ///
 
 void webSocketStatus(String status){
-    if (logEnable) log.debug "webSocketStatus: ${status}"
+    logDebug "webSocketStatus: ${status}"
 
     if (status.startsWith('failure: ')) {
-        state.connection = 'error'
         log.warn "failure message from web socket ${status}"
+        state.connection = 'disconnected'
         reconnectWebSocket()
     } 
     else if (status == 'status: open') {        
+        log.info 'webSocket is open'
         state.connection = 'connected'
-        log.info 'websocket is open'
 
         requestData()
 
@@ -257,12 +262,12 @@ void webSocketStatus(String status){
         state.reconnectDelay = 1
     } 
     else if (status == 'status: closing'){
-        state.connection = 'closing'
         log.warn 'webSocket connection closing.'
+        state.connection = 'closing'
     } 
     else {
-        state.connection = 'not connected'
-        log.warn 'webSocket error, reconnecting.'
+        log.warn "webSocket error: ${status}"
+        state.connection = 'disconnected'
         reconnectWebSocket()
     }
 }
@@ -270,10 +275,13 @@ void webSocketStatus(String status){
 void reconnectWebSocket() {
     // first delay is 2 seconds, doubles every time
     state.reconnectDelay = (state.reconnectDelay ?: 1) * 2
+
     // don't let delay get too crazy, max it out at 10 minutes
     if(state.reconnectDelay > 600) state.reconnectDelay = 600
+
     // if the station is offline, give it some time before trying to reconnect
-    runIn(state.reconnectDelay, initialize)
+    log.info "Reconnecting WebSocket in ${state.reconnectDelay} seconds."
+    runIn(state.reconnectDelay, initialize, [overwrite: false])
 }
 
 void requestData() {
@@ -286,8 +294,26 @@ void requestData() {
             ]
             String message = new groovy.json.JsonBuilder(listenStart).toString()
             interfaces.webSocket.sendMessage(message)
-            logDebug "Sent list_start for ${k}"
+            log.info "Sent list_start for ${k}"
         }
+    }
+}
+
+void healthCheck() {
+    if (state.lastObservation != null) {
+        // check if there have been any observations in the last 3 minutes
+        if(state.lastObservation >= now() - (3 * 60 * 1000)) {
+            // healthy
+            logDebug 'healthCheck: healthy'
+        }
+        else {
+            // not healthy
+            log.warn 'healthCheck: not healthy'
+            reconnectWebSocket()
+        }
+    }
+    else {
+        log.info 'No previous activity. Cannot determine health.'
     }
 }
 
@@ -447,6 +473,8 @@ void parseObservation(Map response) {
     // init strike attributes so that they are available
     if (device.currentValue('strikeDetected') == null) { sendEvent(name: 'strikeDetected', value: 0) }
     if (device.currentValue('strikeDistance') == null) { sendEvent(name: 'strikeDistance', value: 0) }
+
+    state.lastObservation = now()
 }
 
 // summary is undocumented and therefore not guaranteed, however WeatherFlow recognizes people are using these values

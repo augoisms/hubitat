@@ -1,10 +1,10 @@
 {
   "packageName": "WeatherFlow Lite",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2020-07-06",
-  "releaseNotes": "Initialize strike attributes",
+  "dateReleased": "2020-07-13",
+  "releaseNotes": "Added health check.",
   "communityLink": "https://community.hubitat.com/t/release-weatherflow-lite/44674",
   "drivers": [
     {
