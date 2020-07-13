@@ -213,7 +213,7 @@ def requestCallback(response, data) {
     }
     
     // Send the combined AQI
-    send(name: "combined", value: newCombined)
+    send(name: "combined", value: newCombined, unit: "AQI")
     send(name: "combinedCategory", value: newCombinedCategory)
     send(name: "combinedCategoryName", value: newCombinedCategoryName)
     
