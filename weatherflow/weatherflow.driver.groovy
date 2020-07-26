@@ -14,7 +14,7 @@
  *  v1.0.1 - added strikeDistance (2020-07-08)
  *  v1.0.2 - initialize strike attrs (2020-07-09)
  *  v1.0.3 - added health check (2020-07-13)
- *
+ *  v1.0.4 - tchoward - Added Ability to update on a schedule
  */
 
 import groovy.transform.Field
@@ -56,6 +56,7 @@ metadata {
             input name: 'unitPressure', type: 'enum', title: '<b>Unit - Pressure</b>', required: true, options: ['mb': 'Millibars (mb)', 'inHg': 'Inches of mercury (inHg)'], defaultValue: 'inHg'
             input name: 'unitRain', type: 'enum', title: '<b>Unit - Rain</b>', required: true, options: ['in': 'Inches (in)', 'mm': 'Millimeters (mm)'], defaultValue: 'in'
             input name: 'unitDistance', type: 'enum', title: '<b>Unit - Distance</b>', required: true, options: ['mi': 'Miles (mi)', 'km': 'Kilometers (km)'], defaultValue: 'mi'
+            input name: 'refreshRate', type: 'enum', title: '<b>Refresh Rate for Events</b>', required: true, options: ['Real Time', '1 Minute', '5 Minutes', '10 Minutes', '15 Minutes', '30 Minutes', '1 Hour', '3 Hours'], defaultValue: 'Real Time'
         }
 
 		input name: 'logEnable', type: 'bool', title: 'Enable debug logging', defaultValue: false
@@ -83,13 +84,66 @@ void updated() {
     unschedule()
 
     // perform health check every 5 minutes
-    runEvery5Minutes('healthCheck')   
+    runEvery5Minutes('healthCheck') 
+    
+    log.debug("Running SendEvents every "+refreshRate);
+    switch (refreshRate){
+        case 'Real Time':                                     break;
+        case '1 Minute':     runEvery1Minute(sendEvents);     break;
+        case '5 Minutes':    runEvery5Minutes(sendEvents);    break;
+        case '10 Minutes':   runEvery10Minutes(sendEvents);   break;
+        case '15 Minutes':   runEvery15Minutes(sendEvents);   break;
+        case '30 Minutes':   runEvery30Minutes(sendEvents);   break;
+        case '1 Hour':       runEvery1Hour(sendEvents);       break;
+        case '3 Hours':      runEvery3Hours(sendEvents);      break;  
+    }
 
     // disable logs in 30 minutes
     if (settings.logEnable) runIn(1800, logsOff) 
 
     initialize()
 }
+
+                                         
+void sendEvents(){
+    def value;
+    state.data.each{sensor->
+              
+        try {
+             value = sensor.values.sum() / sensor.values.size();
+        } catch (Exception e) {
+             value = sensor.values[sensor.values.size()-1];   
+        }
+        
+        sendEvent(name: sensor.name, value: value, unit: sensor.unit);
+    }
+    
+    state.data = [];
+}
+
+void sendEventLocal(Map m){
+    
+    if (refreshRate == 'Real Time'){
+         sendEvent(m);
+         return;
+    }
+    
+    if (!state.data){
+        state.data = [];
+    }
+    
+    test = state.data.findAll{ it.name == m.name };
+    if (test == []) {
+        state.data << [name: m.name, values: [m.value], unit: m.unit];
+    } else {
+        test.each{sensor->
+             sensor.values << m.value;       
+        }
+    }
+}
+
+
+
 
 void initialize() {
     log.info 'initialize()'
@@ -136,7 +190,7 @@ def parse(String description) {
                 parseObservation(response)
                 break
             case 'evt_precip':
-                sendEvent(name: 'precipitationType', value: 'rain')
+                sendEventLocal(name: 'precipitationType', value: 'rain')
                 logDebug 'precipitationType: rain'
                 break
             case 'evt_strike':
@@ -385,8 +439,8 @@ void healthCheck() {
 
 void parseStrikeEvent(Map response) {
     Map strikeDistance = formatDistance(response.evt[1])
-    sendEvent(name: 'strikeDetected', value: response.evt[0])
-    sendEvent(name: 'strikeDistance', value: strikeDistance.value, unit: strikeDistance.unit)
+    sendEventLocal(name: 'strikeDetected', value: response.evt[0])
+    sendEventLocal(name: 'strikeDistance', value: strikeDistance.value, unit: strikeDistance.unit)
     logDebug "strikeDetected: ${strikeDistance.value} ${strikeDistance.unit}"
 }
 
@@ -410,7 +464,7 @@ void parseObservation(Map response) {
 
         if (field == 'air_temperature') {
             Map temp = formatTemp(it)
-            sendEvent(name: 'temperature', value: temp.value, unit: temp.unit)
+            sendEventLocal(name: 'temperature', value: temp.value, unit: temp.unit)
             logDebug "${field}: ${temp.value} ${temp.unit}"
         }
         
@@ -420,59 +474,59 @@ void parseObservation(Map response) {
         }
 
         if (field == 'illuminance') {
-            sendEvent(name: 'illuminance', value: it, unit: 'lux')
+            sendEventLocal(name: 'illuminance', value: it, unit: 'lux')
             logDebug "${field}: ${it} lux"
         }
         
         if (field == 'local_day_rain_accumulation') {
             Map precipAmount = formatPrecipitationAmount(it)
-            sendEvent(name: 'precipitationToday', value: precipAmount.value, unit: precipAmount.unit)
+            sendEventLocal(name: 'precipitationToday', value: precipAmount.value, unit: precipAmount.unit)
             logDebug "${field}: ${precipAmount.value} ${precipAmount.unit}"
         }
 
         if (field == 'precipitation_type') {
             Map precipType = formatPrecipitationType(it)
-            sendEvent(name: 'precipitationType', value: precipType.value)
+            sendEventLocal(name: 'precipitationType', value: precipType.value)
             logDebug "${field}: ${precipType.value}"
         }
 
         if (field == 'relative_humidity') {
-            sendEvent(name: "humidity", value: it, unit: "%")
+            sendEventLocal(name: "humidity", value: it, unit: "%")
             logDebug "${field}: ${it}%"
         }
 
         if (field == 'solar_radiation') {
-            sendEvent(name: 'solarRadiation', value: it, unit: 'W/m^2')
+            sendEventLocal(name: 'solarRadiation', value: it, unit: 'W/m^2')
             logDebug "${field}: ${it} W/m^2"
         }
 
         if (field == 'station_pressure') {
             Map pressure = formatPressure(it)
-            sendEvent(name: 'pressure', value: pressure.value, unit: pressure.unit)
+            sendEventLocal(name: 'pressure', value: pressure.value, unit: pressure.unit)
             logDebug "${field}: ${pressure.value} ${pressure.unit}"
         }
 
         if (field == 'uv_index') {
-            sendEvent(name: 'ultravioletIndex', value: it,)
+            sendEventLocal(name: 'ultravioletIndex', value: it,)
             logDebug "${field}: ${it}"
         }
 
         if (field == 'wind_avg') {
             Map windSpeed = formatWindSpeed(it)
-            sendEvent(name: 'windSpeed', value: windSpeed.value, unit: windSpeed.unit)
+            sendEventLocal(name: 'windSpeed', value: windSpeed.value, unit: windSpeed.unit)
             logDebug "${field}: ${windSpeed.value} ${windSpeed.unit}"
         }
 
         if (field == 'wind_direction') {
             Map windDirection = formatWindDirection(it)
-            sendEvent(name: 'windDirection', value: windDirection.value, unit: windDirection.unit)
+            sendEventLocal(name: 'windDirection', value: windDirection.value, unit: windDirection.unit)
             logDebug "${field}: ${windDirection.value} ${windDirection.unit}"
         }        
     }
 
     // init strike attributes so that they are available
-    if (device.currentValue('strikeDetected') == null) { sendEvent(name: 'strikeDetected', value: 0) }
-    if (device.currentValue('strikeDistance') == null) { sendEvent(name: 'strikeDistance', value: 0) }
+    if (device.currentValue('strikeDetected') == null) { sendEventLocal(name: 'strikeDetected', value: 0) }
+    if (device.currentValue('strikeDistance') == null) { sendEventLocal(name: 'strikeDistance', value: 0) }
 
     state.lastObservation = now()
 }
@@ -483,22 +537,22 @@ void parseObservation(Map response) {
 // https://weatherflow.github.io/SmartWeather/api/derived-metric-formulas.htm
 void parseSummary(Map response) {
     if (response.summary.containsKey('pressure_trend')) {
-        sendEvent(name: 'pressureTrend', value: response.summary.pressure_trend)
+        sendEventLocal(name: 'pressureTrend', value: response.summary.pressure_trend)
     }    
     
     if (response.summary.containsKey('feels_like')) {
         Map feelsLike = formatTemp(response.summary.feels_like)
-        sendEvent(name: 'feelsLike', value: feelsLike.value, unit: feelsLike.unit)
+        sendEventLocal(name: 'feelsLike', value: feelsLike.value, unit: feelsLike.unit)
     }
     
     if (response.summary.containsKey('heat_index')) {
         Map heatIndex = formatTemp(response.summary.heat_index)
-        sendEvent(name: 'heatIndex', value: heatIndex.value, unit: heatIndex.unit)
+        sendEventLocal(name: 'heatIndex', value: heatIndex.value, unit: heatIndex.unit)
     }
     
     if (response.summary.containsKey('wind_chill')) {
         Map windChill = formatTemp(response.summary.wind_chill)
-        sendEvent(name: 'windChill', value: windChill.value, unit: windChill.unit)
+        sendEventLocal(name: 'windChill', value: windChill.value, unit: windChill.unit)
     }    
 }
 
