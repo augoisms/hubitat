@@ -14,17 +14,19 @@
  *  v1.0.1 - added strikeDistance (2020-07-08)
  *  v1.0.2 - initialize strike attrs (2020-07-09)
  *  v1.0.3 - added health check (2020-07-13)
+ *  v1.0.4 - added support for publish rate, reducing resolution, and precipication rate (2020-08-01)
  *
  */
 
 import groovy.transform.Field
+import java.text.SimpleDateFormat
 
 metadata {
-	definition (name: 'WeatherFlow Lite', namespace: 'augoisms', author: 'Justin Walker', importUrl: 'https://raw.githubusercontent.com/augoisms/hubitat/master/weatherflow/weatherflow.driver.groovy') {
+    definition (name: 'WeatherFlow Lite', namespace: 'augoisms', author: 'Justin Walker', importUrl: 'https://raw.githubusercontent.com/augoisms/hubitat/master/weatherflow/weatherflow.driver.groovy') {
         capability 'IlluminanceMeasurement'
         capability 'Initialize'
         capability 'PressureMeasurement'
-        capability 'RelativeHumidityMeasurement'	
+        capability 'RelativeHumidityMeasurement'
         capability 'Sensor'
         capability 'TemperatureMeasurement'
         capability 'UltravioletIndex'
@@ -32,6 +34,7 @@ metadata {
         attribute 'feelsLike', 'string'
         attribute 'heatIndex', 'number'
         attribute 'pressureTrend', 'enum', ['steady', 'falling', 'rising']
+        attribute 'precipitationRate', 'number'
         attribute 'precipitationToday', 'number'
         attribute 'precipitationType', 'enum', ['none', 'rain', 'hail', 'mix']
         attribute 'solarRadiation', 'number'
@@ -40,16 +43,20 @@ metadata {
         attribute 'windChill', 'number'
         attribute 'windDirection', 'string'
         attribute 'windSpeed', 'number'
-	}
+    }
 
-	preferences {
-		input name: 'apiKey', type: 'string', title: '<b>WeatherFlow API Key</b>', description: '<div><i>Visit: <a href="https://weatherflow.github.io/SmartWeather/api/" target="_blank">WeatherFlow Smart Weather API</a></i></div><br>', required: true
+    preferences {
+        input name: 'apiKey', type: 'string', title: '<b>WeatherFlow API Key</b>', description: '<div><i>Visit: <a href="https://weatherflow.github.io/SmartWeather/api/" target="_blank">WeatherFlow Smart Weather API</a></i></div><br>', required: true
         input name: 'stationId', type: 'string', title: '<b>Station ID</b>', description: '<div><i>ID of your station/hub.</i></div><br>', required: true
         
         if (connectionValidated()) {
             getStationDevices().each { k,v ->
                 input name: "device_" + k, type: 'bool', title: "<b>Device: ${v}</b>", description: "<div><i>Subscribe to ${v} (${k}).</i></div><br>", required: true
             }
+
+            input name: 'publishRate', type: 'enum', title: '<b>Publish Rate</b>', description: '<div><i>Rate that observations are published. Rain and strike events are always real time.</i></div><br>', required: true, options: [0:'Real Time', 180000:'3 Minutes', 300000:'5 Minutes', 600000:'10 Minutes', 900000:'15 Minutes', 1800000:'30 Minutes', 3600000:'1 Hour'], defaultValue: 0
+            input name: 'reduceResolution', type: 'bool', title: '<b>Reduce Resolution</b>', description: '<div><i>Reduce resolution of Illuminance, Temperature, UV Index, and Wind Speed.</i></div><br>', required: true, defaultValue: true
+
             input name: 'unitTemp', type: 'enum', title: '<b>Unit - Temp</b>', required: true, options: ['F': 'Fahrenheit (F)', 'C': 'Celsius (C)'], defaultValue: 1
             input name: 'unitWindDirection', type: 'enum', title: '<b>Unit - Wind Direction</b>', required: true, options: ['cardinal': 'Cardinal', 'degrees': 'Degrees'], defaultValue: 1
             input name: 'unitWindSpeed', type: 'enum', title: '<b>Unit - Wind Speed</b>', required: true, options: ['mph': 'Miles (mph)', 'kph': 'Kilometers (kph)', 'kn': 'Knots', 'm/s': 'Meters (m/s)'], defaultValue: 'mph'
@@ -58,18 +65,15 @@ metadata {
             input name: 'unitDistance', type: 'enum', title: '<b>Unit - Distance</b>', required: true, options: ['mi': 'Miles (mi)', 'km': 'Kilometers (km)'], defaultValue: 'mi'
         }
 
-		input name: 'logEnable', type: 'bool', title: 'Enable debug logging', defaultValue: false
-	}
+        input name: 'logEnable', type: 'bool', title: 'Enable debug logging', defaultValue: false
+    }
 }
 
 ///
 /// lifecycle events
 ///
 
-void installed() {
-    log.info 'installed()'
-    updated()
-}
+void installed() { }
 
 void updated() {
     log.info 'updated()'
@@ -150,8 +154,6 @@ def parse(String description) {
                 log.warn "Unhandled event: ${response}"
                 break
         }
-
-        if (response.containsKey('summary')) parseSummary(response)
     }  
     catch(e) {
         log.error "Failed to parse json e = ${e}"
@@ -385,12 +387,17 @@ void healthCheck() {
 
 void parseStrikeEvent(Map response) {
     Map strikeDistance = formatDistance(response.evt[1])
-    sendEvent(name: 'strikeDetected', value: response.evt[0])
+    sendEvent(name: 'strikeDetected', value: response.evt[0], description: formatDt(response.evt[0]))
     sendEvent(name: 'strikeDistance', value: strikeDistance.value, unit: strikeDistance.unit)
     logDebug "strikeDetected: ${strikeDistance.value} ${strikeDistance.unit}"
 }
 
 void parseObservation(Map response) {
+
+    Boolean publishAll = true
+    Long rate = settings.publishRate as Long
+    if (state.lastPublish != null && (now() - state.lastPublish) < rate) { publishAll = false }
+    logDebug "observation received. publishing: ${publishAll}"
 
     Map obsMap
     switch (response.type) {
@@ -408,73 +415,106 @@ void parseObservation(Map response) {
     response.obs[0].eachWithIndex { it, i -> 
         String field = obsMap[i]
 
-        if (field == 'air_temperature') {
+        if (publishAll && field == 'air_temperature') {
             Map temp = formatTemp(it)
             sendEvent(name: 'temperature', value: temp.value, unit: temp.unit)
             logDebug "${field}: ${temp.value} ${temp.unit}"
         }
         
-        if (field == 'battery') {
+        if (publishAll && field == 'battery') {
             state["battery_${response.device_id}"] = "${it}V"
             logDebug "${field}: ${it}V"
         }
 
-        if (field == 'illuminance') {
-            sendEvent(name: 'illuminance', value: it, unit: 'lux')
-            logDebug "${field}: ${it} lux"
+        if (publishAll && field == 'illuminance') {
+            Map illuminance = formatIlluminance(it)
+            sendEvent(name: 'illuminance', value: illuminance.value, unit: illuminance.unit)
+            logDebug "${field}: ${illuminance.value} ${illuminance.unit}"
         }
         
-        if (field == 'local_day_rain_accumulation') {
+        if (publishAll && field == 'local_day_rain_accumulation') {
             Map precipAmount = formatPrecipitationAmount(it)
             sendEvent(name: 'precipitationToday', value: precipAmount.value, unit: precipAmount.unit)
             logDebug "${field}: ${precipAmount.value} ${precipAmount.unit}"
         }
 
+        // evt_precip does not include the type, so always publish precipitation_type
         if (field == 'precipitation_type') {
             Map precipType = formatPrecipitationType(it)
             sendEvent(name: 'precipitationType', value: precipType.value)
             logDebug "${field}: ${precipType.value}"
         }
 
-        if (field == 'relative_humidity') {
+        if (field == 'rain_accumulation') {
+            BigDecimal precipRate = parsePrecipitationRate(it as BigDecimal)
+            if (publishAll) {
+                Map precipAmount = formatPrecipitationAmount(precipRate)
+                sendEvent(name: 'precipitationRate', value: precipAmount.value, unit: "${precipAmount.unit}/hr")
+                logDebug "${field}: ${precipAmount.value} ${precipAmount.unit}/hr"
+            }
+        }
+
+        if (publishAll && field == 'relative_humidity') {
             sendEvent(name: "humidity", value: it, unit: "%")
             logDebug "${field}: ${it}%"
         }
 
-        if (field == 'solar_radiation') {
+        if (publishAll && field == 'solar_radiation') {
             sendEvent(name: 'solarRadiation', value: it, unit: 'W/m^2')
             logDebug "${field}: ${it} W/m^2"
         }
 
-        if (field == 'station_pressure') {
+        if (publishAll && field == 'station_pressure') {
             Map pressure = formatPressure(it)
             sendEvent(name: 'pressure', value: pressure.value, unit: pressure.unit)
             logDebug "${field}: ${pressure.value} ${pressure.unit}"
         }
 
-        if (field == 'uv_index') {
-            sendEvent(name: 'ultravioletIndex', value: it,)
-            logDebug "${field}: ${it}"
+        if (publishAll && field == 'uv_index') {
+            def uvIndex = settings.reduceResolution ? Math.round(it) : it
+            sendEvent(name: 'ultravioletIndex', value: uvIndex,)
+            logDebug "${field}: ${uvIndex}"
         }
 
-        if (field == 'wind_avg') {
+        if (publishAll && field == 'wind_avg') {
             Map windSpeed = formatWindSpeed(it)
             sendEvent(name: 'windSpeed', value: windSpeed.value, unit: windSpeed.unit)
             logDebug "${field}: ${windSpeed.value} ${windSpeed.unit}"
         }
 
-        if (field == 'wind_direction') {
+        if (publishAll && field == 'wind_direction') {
             Map windDirection = formatWindDirection(it)
             sendEvent(name: 'windDirection', value: windDirection.value, unit: windDirection.unit)
             logDebug "${field}: ${windDirection.value} ${windDirection.unit}"
         }        
     }
 
+    if (publishAll && response.containsKey('summary')) parseSummary(response)
+
     // init strike attributes so that they are available
     if (device.currentValue('strikeDetected') == null) { sendEvent(name: 'strikeDetected', value: 0) }
     if (device.currentValue('strikeDistance') == null) { sendEvent(name: 'strikeDistance', value: 0) }
 
     state.lastObservation = now()
+    if (publishAll) state.lastPublish = now()
+}
+
+@Field static Map rainAccumulation = [:]
+
+BigDecimal parsePrecipitationRate(BigDecimal rate)  {
+    Long now = now()
+    rainAccumulation[now] = rate
+
+    def lastHour = rainAccumulation.findAll { (now - (it.key as Long)) < 3600000 }
+    rainAccumulation = lastHour
+
+    def total = lastHour.inject(0) { sum, k, v ->
+        sum + v
+    }
+
+    logDebug "rainAccumulation: ${rainAccumulation}"
+
+    return total
 }
 
 // summary is undocumented and therefore not guaranteed, however WeatherFlow recognizes people are using these values
@@ -506,18 +546,49 @@ void parseSummary(Map response) {
 /// formatters
 ///
 
+String formatDateTime(Long dt) {
+    Date t0 = new Date(dt)
+    SimpleDateFormat tf = new SimpleDateFormat("E MMM dd HH:mm:ss z yyyy")
+    tf.setTimeZone(location.timeZone)
+    return tf.format(t0)
+}
+
 Map formatDistance(Integer value) {
     Boolean metric = (settings.unitDistance == 'km')
     return [
-        value: metric ? value : value / 1.609344,
+        value: metric ? round1(value) : round1(value / 1.609344),
         unit: metric ? 'km' : 'mi'
+    ]
+}
+
+Map formatIlluminance(Integer value) {
+    Integer illuminance = value
+
+    if (settings.reduceResolution) {
+        // round values to the nearest thousand
+        if (value >= 1000) {
+            illuminance = value % 1000 >= 500 ? value + 1000 - value % 1000 : value - (value % 1000)
+        }
+        // round values to the nearest hundred
+        else if (value >= 100) {
+            illuminance = value % 100 >= 50 ? value + 100 - value % 100 : value - (value % 100)
+        }
+        // round values to the nearest ten
+        else if (value >= 10) {
+            illuminance = value % 10 >= 5 ? value + 10 - value % 10 : value - (value % 10)
+        }
+    }
+
+    return [
+        value: illuminance,
+        unit: 'lux'
     ]
 }
 
 Map formatPrecipitationAmount(BigDecimal value) {
     Boolean inches = (settings.unitRain == 'in')
     return [
-        value: inches ? value / 25.4 : value,
+        value: inches ? round2(value / 25.4) : round2(value),
         unit: inches ? 'in' : 'mm'
     ]
 }
@@ -549,15 +620,16 @@ Map formatPressure(BigDecimal value) {
     Boolean mb = (settings.unitPressure == 'mb')
     BigDecimal seaLevelPressure = calculateSeaLevelPressure(value)
     return [
-        value: mb ? seaLevelPressure : round3(seaLevelPressure / 33.864),
+        value: mb ? round1(seaLevelPressure) : round2(seaLevelPressure / 33.864),
         unit: mb ? 'mb' : 'inHg'
     ]
 }
 
 Map formatTemp(BigDecimal value) {
     Boolean fahrenheit = (settings.unitTemp == 'F')
+    def temp = fahrenheit ? (value * 1.8) + 32 : value
     return [
-        value: fahrenheit ? (value * 1.8) + 32 : value,
+        value: settings.reduceResolution ? round1Even(temp) : temp,
         unit: fahrenheit ? 'F' : 'C'
     ]
 }
@@ -596,7 +668,7 @@ Map formatWindSpeed(BigDecimal value) {
     }
 
     return [
-        value: round2(speed),
+        value: settings.reduceResolution ? Math.round(speed) : round2(speed),
         unit: unit
     ]
 }
@@ -646,4 +718,12 @@ BigDecimal round3(BigDecimal value) {
 
 BigDecimal round2(BigDecimal value) {
     return Math.round(value * 100) / 100
+}
+
+BigDecimal round1(BigDecimal value) {
+    return Math.round(value * 10) / 10
+}
+
+BigDecimal round1Even(BigDecimal value) {
+    return Math.round(value / 0.2) * 0.2
 }
