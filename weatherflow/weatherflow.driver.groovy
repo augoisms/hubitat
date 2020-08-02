@@ -54,7 +54,7 @@ metadata {
                 input name: "device_" + k, type: 'bool', title: "<b>Device: ${v}</b>", description: "<div><i>Subscribe to ${v} (${k}).</i></div><br>", required: true
             }
 
-            input name: 'publishRate', type: 'enum', title: '<b>Publish Rate</b>', description: '<div><i>Rate that observations are published. Rain and strike events are always real time.</i></div><br>', required: true, options: [0:'Real Time', 180000:'3 Minutes', 300000:'5 Minutes', 600000:'10 Minutes', 900000:'15 Minutes', 1800000:'30 Minutes', 3600000:'1 Hour'], defaultValue: 0
+            input name: 'publishRate', type: 'enum', title: '<b>Publish Rate</b>', description: '<div><i>Rate that observations are published. Rain and strike events are always real time.</i></div><br>', required: true, options: [0:'Real Time', 180000:'3 Minutes', 300000:'5 Minutes', 600000:'10 Minutes', 900000:'15 Minutes', 1800000:'30 Minutes', 3600000:'1 Hour'], defaultValue: 600000
             input name: 'reduceResolution', type: 'bool', title: '<b>Reduce Resolution</b>', description: '<div><i>Reduce resolution of Illuminance, Temperature, UV Index, and Wind Speed.</i></div><br>', required: true, defaultValue: true
 
             input name: 'unitTemp', type: 'enum', title: '<b>Unit - Temp</b>', required: true, options: ['F': 'Fahrenheit (F)', 'C': 'Celsius (C)'], defaultValue: 1
@@ -169,7 +169,7 @@ def parse(String description) {
 Boolean connectionValidated() {   
     // api key and stationId are required
     if(!apiKey || !stationId) {
-        log.warn 'apiKey and stationId are required'
+        //log.warn 'apiKey and stationId are required'
         return false
     }
 
@@ -387,7 +387,7 @@ void healthCheck() {
 
 void parseStrikeEvent(Map response) {
     Map strikeDistance = formatDistance(response.evt[1])
-    sendEvent(name: 'strikeDetected', value: response.evt[0], description: formatDt(response.evt[0]))
+    sendEvent(name: 'strikeDetected', value: response.evt[0], description: formatDt((Long)response.evt[0]*1000L))
     sendEvent(name: 'strikeDistance', value: strikeDistance.value, unit: strikeDistance.unit)
     logDebug "strikeDetected: ${strikeDistance.value} ${strikeDistance.unit}"
 }
@@ -396,7 +396,7 @@ void parseObservation(Map response) {
 
     Boolean publishAll = true
     Long rate = settings.publishRate as Long
-    if (state.lastPublish != null && (now() - state.lastPublish) < rate) { publishAll = false }
+    if (state.lastPublish != null && (now() - (Long)state.lastPublish) < rate) { publishAll = false }
     logDebug "observation received. publishing: ${publishAll}"
 
     Map obsMap
@@ -546,7 +546,7 @@ void parseSummary(Map response) {
 /// formatters
 ///
 
-String formatDateTime(Long dt) {
+String formatDt(Long dt) {
     Date t0 = new Date(dt)
     SimpleDateFormat tf = new SimpleDateFormat("E MMM dd HH:mm:ss z yyyy")
     tf.setTimeZone(location.timeZone)
