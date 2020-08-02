@@ -15,6 +15,7 @@
  *  v1.0.2 - initialize strike attrs (2020-07-09)
  *  v1.0.3 - added health check (2020-07-13)
  *  v1.0.4 - added support for publish rate, reducing resolution, and precipication rate (2020-08-01)
+ *  v1.0.5 - bug fixes (2020-08-02)
  *
  */
 
@@ -105,7 +106,7 @@ void initialize() {
     pauseExecution(1000)
 
     if (!connectionValidated()) {
-        log.warn 'Connection not validated. Cannot initialized.'
+        //log.warn 'Connection not validated. Cannot initialized.'
         return
     }
 
@@ -387,7 +388,7 @@ void healthCheck() {
 
 void parseStrikeEvent(Map response) {
     Map strikeDistance = formatDistance(response.evt[1])
-    sendEvent(name: 'strikeDetected', value: response.evt[0], description: formatDt(response.evt[0]))
+    sendEvent(name: 'strikeDetected', value: response.evt[0], descriptionText: formatDateTime((Long)response.evt[0]))
     sendEvent(name: 'strikeDistance', value: strikeDistance.value, unit: strikeDistance.unit)
     logDebug "strikeDetected: ${strikeDistance.value} ${strikeDistance.unit}"
 }
@@ -396,7 +397,7 @@ void parseObservation(Map response) {
 
     Boolean publishAll = true
     Long rate = settings.publishRate as Long
-    if (state.lastPublish != null && (now() - state.lastPublish) < rate) { publishAll = false }
+    if (state.lastPublish != null && (now() - (Long)state.lastPublish) < rate) { publishAll = false }
     logDebug "observation received. publishing: ${publishAll}"
 
     Map obsMap
@@ -547,7 +548,7 @@ void parseSummary(Map response) {
 ///
 
 String formatDateTime(Long dt) {
-    Date t0 = new Date(dt)
+    Date t0 = new Date(dt * 1000)
     SimpleDateFormat tf = new SimpleDateFormat("E MMM dd HH:mm:ss z yyyy")
     tf.setTimeZone(location.timeZone)
     return tf.format(t0)

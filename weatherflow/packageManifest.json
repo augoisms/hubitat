@@ -1,10 +1,10 @@
 {
   "packageName": "WeatherFlow Lite",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minimumHEVersion": "2.2.0",
   "dateReleased": "2020-08-01",
-  "releaseNotes": "added support for publish rate, reducing resolution, and precipication rate",
+  "releaseNotes": "added support for publish rate, reducing resolution, and precipication rate. fix for strike event bug.",
   "communityLink": "https://community.hubitat.com/t/release-weatherflow-lite/44674",
   "drivers": [
     {
