@@ -387,7 +387,7 @@ void healthCheck() {
 
 void parseStrikeEvent(Map response) {
     Map strikeDistance = formatDistance(response.evt[1])
-    sendEvent(name: 'strikeDetected', value: response.evt[0], description: formatDt(response.evt[0]))
+    sendEvent(name: 'strikeDetected', value: response.evt[0], descriptionText: formatDt(response.evt[0]))
     sendEvent(name: 'strikeDistance', value: strikeDistance.value, unit: strikeDistance.unit)
     logDebug "strikeDetected: ${strikeDistance.value} ${strikeDistance.unit}"
 }
