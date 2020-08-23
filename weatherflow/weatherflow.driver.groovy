@@ -16,6 +16,7 @@
  *  v1.0.3 - added health check (2020-07-13)
  *  v1.0.4 - added support for publish rate, reducing resolution, and precipication rate (2020-08-01)
  *  v1.0.5 - bug fixes (2020-08-02)
+ *  v1.0.6 - added null handling and battery status (2020-08-23)
  *
  */
 
@@ -416,6 +417,15 @@ void parseObservation(Map response) {
     response.obs[0].eachWithIndex { it, i -> 
         String field = obsMap[i]
 
+        // do not process null values
+        if (it == null) {
+            // rain_accumulation_final and local_day_rain_accumulation_final are frequently null, so don't warn
+            if (field != 'rain_accumulation_final' && field != 'local_day_rain_accumulation_final') {
+                log.warn "null values for ${field}"
+            }            
+            return
+        }
+
         if (publishAll && field == 'air_temperature') {
             Map temp = formatTemp(it)
             sendEvent(name: 'temperature', value: temp.value, unit: temp.unit)
@@ -423,8 +433,9 @@ void parseObservation(Map response) {
         }
         
         if (publishAll && field == 'battery') {
-            state["battery_${response.device_id}"] = "${it}V"
-            logDebug "${field}: ${it}V"
+            String battery = formatBattery(it, response.type)
+            state["battery_${response.device_id}"] = battery
+            logDebug "${field}: ${battery}"
         }
 
         if (publishAll && field == 'illuminance') {
@@ -523,21 +534,21 @@ BigDecimal parsePrecipitationRate(BigDecimal rate)  {
 // if these were to go away, they could be calculated in the driver
 // https://weatherflow.github.io/SmartWeather/api/derived-metric-formulas.htm
 void parseSummary(Map response) {
-    if (response.summary.containsKey('pressure_trend')) {
+    if (response.summary.containsKey('pressure_trend') && response.summary.pressure_trend != null) {
         sendEvent(name: 'pressureTrend', value: response.summary.pressure_trend)
     }    
     
-    if (response.summary.containsKey('feels_like')) {
+    if (response.summary.containsKey('feels_like') && response.summary.feels_like != null) {
         Map feelsLike = formatTemp(response.summary.feels_like)
         sendEvent(name: 'feelsLike', value: feelsLike.value, unit: feelsLike.unit)
     }
     
-    if (response.summary.containsKey('heat_index')) {
+    if (response.summary.containsKey('heat_index') && response.summary.heat_index != null) {
         Map heatIndex = formatTemp(response.summary.heat_index)
         sendEvent(name: 'heatIndex', value: heatIndex.value, unit: heatIndex.unit)
     }
     
-    if (response.summary.containsKey('wind_chill')) {
+    if (response.summary.containsKey('wind_chill') && response.summary.wind_chill != null) {
         Map windChill = formatTemp(response.summary.wind_chill)
         sendEvent(name: 'windChill', value: windChill.value, unit: windChill.unit)
     }    
@@ -546,6 +557,16 @@ void parseSummary(Map response) {
 ///
 /// formatters
 ///
+
+String formatBattery(BigDecimal voltage, String responseType) {
+    if (responseType != 'obs_st') return "${voltage}V"
+
+    String status
+    if (voltage >= 2.455) { status = 'good' }
+    else { mode = 'low'}
+
+    return "${voltage}V ${status}"
+}
 
 String formatDateTime(Long dt) {
     Date t0 = new Date(dt * 1000)
