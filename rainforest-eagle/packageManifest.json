@@ -1,9 +1,10 @@
 {
   "packageName": "Rainforest Eagle",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2020-04-26",
+  "dateReleased": "2020-12-12",
+  "releaseNotes": "Added health check.",
   "communityLink": "https://community.hubitat.com/t/release-rainforest-eagle/38883",
   "drivers": [
     {

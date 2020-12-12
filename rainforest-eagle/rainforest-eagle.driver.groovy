@@ -10,7 +10,8 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  V1.0.0 - Initial version
+ *  v1.0.0 - Initial version (2020-04-26)
+ *  v1.0.1 - Added health check (2020-12-12)
  *
  */
 
@@ -42,20 +43,23 @@ def updated() {
 
 void installedUpdated() {
     unschedule()
+
     setNetworkAddress()
-    if (settings.loggingEnabled) runIn(1800, disableLogging) // 30 minutes
-    scheduleTimeout()
+
+    // disable logging in 30 minutes
+    if (settings.loggingEnabled) runIn(1800, disableLogging)
 
     // schedule auto reset
     if (autoResetEnergy && autoResetEnergy != "Disabled") {
         schedule("0 0 0 ${autoResetEnergy} * ? *", "resetEnergy")
     }
+
+    // perform health check every 1 minutes
+    runEvery1Minute('healthCheck') 
 }
 
 // parse events into attributes
 def parse(String description) {
-    unschedule("timeout")
-
     logDebug "Parsing '${description}'"
 
     def msg = parseLanMessage(description)   
@@ -88,7 +92,7 @@ def parse(String description) {
         parseCurrentSummation(body.SummationDelivered)
     }
 
-    scheduleTimeout()
+    state.lastReport = now()
 }
 
 void resetEnergy() {
@@ -199,15 +203,25 @@ void updateDeviceData(String key, String value) {
     }
 }
 
-void timeout() {
-    def unit = reportWatts ? "W" : "kW"
-    sendEvent(name: "power", value: "0", unit: unit)
-}
-
-void scheduleTimeout() {
-    // if we don't receive any messages within 1 minute
-    // set power to 0
-    runIn(60, "timeout")
+void healthCheck() {
+    if (state.lastReport != null) {
+        // check if there have been any reports in the last 1 minute
+        if(state.lastReport >= now() - (1 * 60 * 1000)) {
+            // healthy
+            logDebug 'healthCheck: healthy'
+        }
+        else {
+            // not healthy
+            log.warn 'healthCheck: not healthy'
+            // if we don't receive any messages within 1 minute
+            // set power to 0
+            def unit = reportWatts ? "W" : "kW"
+            sendEvent(name: "power", value: "0", unit: unit)
+        }
+    }
+    else {
+        log.info 'No previous reports. Cannot determine health.'
+    }
 }
 
 private Integer convertHexToInt(hex) {
