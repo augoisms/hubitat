@@ -1,10 +1,10 @@
 {
   "packageName": "Rainforest Eagle",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2020-12-12",
-  "releaseNotes": "Added health check.",
+  "dateReleased": "2020-12-18",
+  "releaseNotes": "Fix for parsing Eagle 200 summation (2020-12-18).",
   "communityLink": "https://community.hubitat.com/t/release-rainforest-eagle/38883",
   "drivers": [
     {

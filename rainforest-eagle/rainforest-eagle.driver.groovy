@@ -12,6 +12,7 @@
  *
  *  v1.0.0 - Initial version (2020-04-26)
  *  v1.0.1 - Added health check (2020-12-12)
+ *  v1.0.2 - Fix for parsing Eagle 200 summation (2020-12-18)
  *
  */
 
@@ -89,7 +90,7 @@ def parse(String description) {
 
     if (body?.CurrentSummation?.SummationDelivered.text()) {
         // EAGLE 200
-        parseCurrentSummation(body.SummationDelivered)
+        parseCurrentSummation(body.CurrentSummation)
     }
 
     state.lastReport = now()
