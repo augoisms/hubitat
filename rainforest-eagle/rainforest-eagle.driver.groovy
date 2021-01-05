@@ -13,28 +13,35 @@
  *  v1.0.0 - Initial version (2020-04-26)
  *  v1.0.1 - Added health check (2020-12-12)
  *  v1.0.2 - Fix for parsing Eagle 200 summation (2020-12-18)
+ *  v1.0.3 - Added support for price & cost (2021-01-05)
  *
  */
 
-metadata {
-    definition(name: "Rainforest Eagle", namespace: "augoisms", author: "Justin Walker") {
-        capability "PowerMeter"
-        capability "EnergyMeter"
-        capability "Sensor"
+import groovy.transform.Field
 
-        command "resetEnergy"
+metadata {
+    definition(name: 'Rainforest Eagle', namespace: 'augoisms', author: 'Justin Walker') {
+        capability 'PowerMeter'
+        capability 'EnergyMeter'
+        capability 'Sensor'
+
+        command 'resetEnergy'
+
+        attribute 'price', 'number'
+        attribute 'cost', 'number'
+        attribute 'costPerHour', 'number'
     }
 }
 
 preferences {
-    input name: "eagleIP", type: "string", title:"<b>Eagle IP Address</b>", description: "<div><i>Please use a static IP.</i></div><br>", required: true
-    input name: "reportWatts", type: "bool", title:"<b>Report Power in Watts?</b>", description: "<div><i>Default reporting is in kW. Energy is always in kWh.</i></div><br>", defaultValue: true
-    input name: "autoResetEnergy", type: "enum", title: "<b>Automatically Reset Energy</b>", description: "<div><i>Reset energy on the specified day every month.</i></div></br>", options: daysOptions(), defaultValue: "Disabled"
-    input name: "loggingEnabled", type: "bool", title: "<b>Enable Logging?</b>", description: "<div><i>Automatically disables after 30 minutes.</i></div><br>", defaultValue: false
+    input name: 'eagleIP', type: 'string', title:'<b>Eagle IP Address</b>', description: '<div><i>Please use a static IP.</i></div><br>', required: true
+    input name: 'reportWatts', type: 'bool', title:'<b>Report Power in Watts?</b>', description: '<div><i>Default reporting is in kW. Energy is always in kWh.</i></div><br>', defaultValue: true
+    input name: 'autoResetEnergy', type: 'enum', title: '<b>Automatically Reset Energy</b>', description: '<div><i>Reset energy on the specified day every month.</i></div></br>', options: daysOptions, defaultValue: 'Disabled'
+    input name: 'loggingEnabled', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
 }
 
 def installed() {
-    log.debug "RainforestEagle device installed"
+    log.debug 'RainforestEagle device installed'
     installedUpdated()
 }
 
@@ -51,8 +58,8 @@ void installedUpdated() {
     if (settings.loggingEnabled) runIn(1800, disableLogging)
 
     // schedule auto reset
-    if (autoResetEnergy && autoResetEnergy != "Disabled") {
-        schedule("0 0 0 ${autoResetEnergy} * ? *", "resetEnergy")
+    if (autoResetEnergy && autoResetEnergy != 'Disabled') {
+        schedule("0 0 0 ${autoResetEnergy} * ? *", 'resetEnergy')
     }
 
     // perform health check every 1 minutes
@@ -93,14 +100,18 @@ def parse(String description) {
         parseCurrentSummation(body.CurrentSummation)
     }
 
+    if (body?.PriceCluster?.Price.text()) {
+        parsePriceCluster(body.PriceCluster)
+    }
+
     state.lastReport = now()
 }
 
 void resetEnergy() {
     // reset engery starting point
-    state.remove("energyStart")
-    state.remove("energyStartTimestamp")
-    sendEvent(name: "energy", value: 0, unit: "kWh")
+    state.remove('energyStart')
+    state.remove('energyStartTimestamp')
+    sendEvent(name: 'energy', value: 0, unit: 'kWh')
 }
 
 void setNetworkAddress() {
@@ -127,34 +138,38 @@ void parseInstantaneousDemand(InstantaneousDemand) {
     if (divisor == 0) { divisor = 1 }
     
     def value = (demand * multiplier) / divisor
-    value = reportWatts ? Math.round(value * 1000) : value
-    def unit = reportWatts ? "W" : "kW"
+    def reportedValue = reportWatts ? Math.round(value * 1000) : value
+    def unit = reportWatts ? 'W' : 'kW'
     
-    logDebug "Current Demand: ${value}"
+    logDebug "Current Demand: ${reportedValue}"
     
-    sendEvent(name: "power", value: value, unit: unit)
+    sendEvent(name: 'power', value: reportedValue, unit: unit)
+
+    // calculate estimated cost per hour
+    def costPerHour = round2(value * (device.currentValue('price') ?: 0))
+    sendEvent(name: 'costPerHour', value: costPerHour)
 }
 
 void parseDeviceInfo(deviceInfo) {
-    updateDeviceData("zigbeeMacId", deviceInfo.DeviceMacId.text())
-    updateDeviceData("installCode", deviceInfo.InstallCode.text())
-    updateDeviceData("linkKey", deviceInfo.LinkKey.text())
-    updateDeviceData("fwVersion", deviceInfo.FWVersion.text())
-    updateDeviceData("hwVersion", deviceInfo.HWVersion.text())
-    updateDeviceData("imageType", deviceInfo.ImageType.text())
-    updateDeviceData("modelId", deviceInfo.ModelId.text())
-    updateDeviceData("dateCode", deviceInfo.DateCode.text())
-    updateDeviceData("installCode", deviceInfo.InstallCode.text())
+    updateDeviceData('zigbeeMacId', deviceInfo.DeviceMacId.text())
+    updateDeviceData('installCode', deviceInfo.InstallCode.text())
+    updateDeviceData('linkKey', deviceInfo.LinkKey.text())
+    updateDeviceData('fwVersion', deviceInfo.FWVersion.text())
+    updateDeviceData('hwVersion', deviceInfo.HWVersion.text())
+    updateDeviceData('imageType', deviceInfo.ImageType.text())
+    updateDeviceData('modelId', deviceInfo.ModelId.text())
+    updateDeviceData('dateCode', deviceInfo.DateCode.text())
+    updateDeviceData('installCode', deviceInfo.InstallCode.text())
 }
 
 void parseNetworkInfo(networkInfo) {
     if (networkInfo.Protocol.text()) {
         // Eagle 200
-        updateDeviceData("meterMacId", networkInfo.MeterMacId.text())
+        updateDeviceData('meterMacId', networkInfo.MeterMacId.text())
     }
     else {
         // Eagle 100   
-        updateDeviceData("meterMacId", networkInfo.CoordMacId.text())    
+        updateDeviceData('meterMacId', networkInfo.CoordMacId.text())    
     }    
     state.connectionStatus = networkInfo.Status.text()
     state.channel = networkInfo.Channel.text()
@@ -185,17 +200,28 @@ void parseCurrentSummation(summation) {
     
     if (state.energyStart) {
         // calculate energy
-        def totalEnergy = deliveredValue - state.energyStart
-        // round to 2 decimal places
-        totalEnergy = Math.round(totalEnergy * 100) / 100
-        sendEvent(name: "energy", value: totalEnergy, unit: "kWh")
+        def totalEnergy = round2(deliveredValue - state.energyStart)
+        sendEvent(name: 'energy', value: totalEnergy, unit: 'kWh')
+
+        // calculate cost of total energy
+        def costEnergy = round2(totalEnergy * (device.currentValue('price') ?: 0))
+        sendEvent(name: 'cost', value: costEnergy)
     }
     else {
         // save value
         state.energyStart = deliveredValue
         state.energyStartTimestamp = dateString
-        sendEvent(name: "energy", value: 0, unit: "kWh")
+        sendEvent(name: 'energy', value: 0, unit: 'kWh')
+        sendEvent(name: 'cost', value: 0)
     }
+}
+
+void parsePriceCluster(priceCluster) {
+    int price = convertHexToInt(priceCluster.Price.text())
+    int trailingDigits = convertHexToInt(priceCluster.TrailingDigits.text())
+
+    def priceKwh = price > 0 ? Double.parseDouble("${price}e-${trailingDigits}") : 0
+    sendEvent(name: 'price', value: priceKwh)
 }
 
 void updateDeviceData(String key, String value) {
@@ -216,8 +242,8 @@ void healthCheck() {
             log.warn 'healthCheck: not healthy'
             // if we don't receive any messages within 1 minute
             // set power to 0
-            def unit = reportWatts ? "W" : "kW"
-            sendEvent(name: "power", value: "0", unit: unit)
+            def unit = reportWatts ? 'W' : 'kW'
+            sendEvent(name: 'power', value: '0', unit: unit)
         }
     }
     else {
@@ -240,7 +266,7 @@ private String utc2000ToDate(int seconds) {
     // <UNIX time> = <2000 time> + <January 1, 2000 UNIX time>
     int unixSeconds = seconds + unix200Time
     long unixMilliseconds = unixSeconds * 1000L
-    new Date(unixMilliseconds).format("yyyy-MM-dd h:mm", location.timeZone)
+    new Date(unixMilliseconds).format('yyyy-MM-dd h:mm', location.timeZone)
 }
 
 void disableLogging() {
@@ -254,4 +280,8 @@ void logDebug(str) {
     }
 }
 
-def daysOptions() { ["Disabled","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31"] }
+@Field static List daysOptions = ['Disabled','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31']
+
+BigDecimal round2(BigDecimal value) {
+    return Math.round(value * 100) / 100
+}
