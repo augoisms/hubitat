@@ -14,6 +14,7 @@
  *  v1.0.1 - Added health check (2020-12-12)
  *  v1.0.2 - Fix for parsing Eagle 200 summation (2020-12-18)
  *  v1.0.3 - Added support for price & cost (2021-01-05)
+ *  v1.0.4 - Added null check in hex conversion (2020-01-09)
  *
  */
 
@@ -252,7 +253,7 @@ void healthCheck() {
 }
 
 private Integer convertHexToInt(hex) {
-    return new BigInteger(hex[2..-1], 16)
+    return hex ? new BigInteger(hex[2..-1], 16) : 0
 }
 
 private String convertIPtoHex(ipAddress) { 
