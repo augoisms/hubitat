@@ -14,7 +14,8 @@
  *  v1.0.1 - Added health check (2020-12-12)
  *  v1.0.2 - Fix for parsing Eagle 200 summation (2020-12-18)
  *  v1.0.3 - Added support for price & cost (2021-01-05)
- *  v1.0.4 - Added null check in hex conversion (2020-01-09)
+ *  v1.0.4 - Added null check in hex conversion (2021-01-09)
+ *  v1.0.5 - NetworkInfo parsing improvements, added status attribute (2021-01-11)
  *
  */
 
@@ -28,9 +29,10 @@ metadata {
 
         command 'resetEnergy'
 
-        attribute 'price', 'number'
         attribute 'cost', 'number'
         attribute 'costPerHour', 'number'
+        attribute 'price', 'number'
+        attribute 'status', 'string'
     }
 }
 
@@ -52,6 +54,8 @@ def updated() {
 
 void installedUpdated() {
     unschedule()
+
+    state.remove('connectionStatus')
 
     setNetworkAddress()
 
@@ -164,15 +168,13 @@ void parseDeviceInfo(deviceInfo) {
 }
 
 void parseNetworkInfo(networkInfo) {
-    if (networkInfo.Protocol.text()) {
-        // Eagle 200
-        updateDeviceData('meterMacId', networkInfo.MeterMacId.text())
-    }
-    else {
-        // Eagle 100   
-        updateDeviceData('meterMacId', networkInfo.CoordMacId.text())    
-    }    
-    state.connectionStatus = networkInfo.Status.text()
+    // only parse zigbee network info
+    if (getDataValue('zigbeeMacId') != networkInfo.DeviceMacId.text()) return
+    
+    // CoordMacId (Eagle 100), MeterMacId (Eagle 200)
+    updateDeviceData('meterMacId', networkInfo.CoordMacId.text() ?: networkInfo.MeterMacId.text()) 
+       
+    sendEvent(name: 'status', value: networkInfo.Status.text())
     state.channel = networkInfo.Channel.text()
     state.connectionStrength = convertHexToInt(networkInfo.LinkStrength.text()) + "%"
 }
@@ -245,6 +247,7 @@ void healthCheck() {
             // set power to 0
             def unit = reportWatts ? 'W' : 'kW'
             sendEvent(name: 'power', value: '0', unit: unit)
+            sendEvent(name: 'status', value: 'Disconnected')
         }
     }
     else {

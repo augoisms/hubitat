@@ -1,10 +1,10 @@
 {
   "packageName": "Rainforest Eagle",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2021-01-05",
-  "releaseNotes": "Added support for price & cost (2021-01-05). Added null check for hex conversion (2020-01-09).",
+  "dateReleased": "2021-01-11",
+  "releaseNotes": "Added support for price & cost (2021-01-05). Added null check for hex conversion (2021-01-09). NetworkInfo parsing improvements, added status attribute (2021-01-11).",
   "communityLink": "https://community.hubitat.com/t/release-rainforest-eagle/38883",
   "drivers": [
     {
