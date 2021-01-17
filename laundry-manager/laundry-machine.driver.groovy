@@ -10,30 +10,29 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  V1.0.0 - Initial version
+ *  v1.0.0 - Initial version
+ *  v1.0.3 - Added support for time on threshold (2021-01-17).
  *
  */
 metadata {
-    definition (name: "Laundry Machine", namespace: "augoisms", author: "Justin Walker") {
-        capability "Sensor"
-        capability "Power Meter"
-        capability "Switch"
-        capability "Momentary"
+    definition (name: 'Laundry Machine', namespace: 'augoisms', author: 'Justin Walker') {
+        capability 'Sensor'
+        capability 'Power Meter'
+        capability 'Switch'
+        capability 'Momentary'
 
-        command "refresh"
+        command 'refresh'
         
-        attribute "status", "enum", ["idle", "running", "finished"]
-        attribute "wasRunning", "enum", ["true", "false"]
+        attribute 'status', 'enum', ['idle', 'running', 'finished']
     }
 }
 
 preferences {
-    input title: "", description: "State related options", type: "paragraph", element: "paragraph"
-    input name: "wattThreshold", type: "number", title: "Minimum watt value to trigger state\n", defaultValue: "10"
-    input name: "minTimeOff", type: "number", title: "Minimum time (min) watts need to stay below the threshold\n", defaultValue: "2"
+    input name: 'wattThreshold', type: 'number', title: '<b>Watt Threshold</b>', description: '<div><i>Minimum watt value to trigger state</i></div><br>', defaultValue: '10'
+    input name: 'minTimeOn', type: 'number', title: '<b>Time Threshold (On)</b>', description: '<div><i>Minimum time (seconds) watts need to stay above the threshold</i></div><br>', defaultValue: 15
+    input name: 'minTimeOff', type: 'number', title: '<b>Time Threshold (Off)</b>', description: '<div><i>Minimum time (seconds) watts need to stay below the threshold</i></div><br>', defaultValue: 120
 
-    input title: "", description: "Logging", type: "paragraph", element: "paragraph"
-    input name: "isLogLevelDebug", type: "bool", title: "Show debug log level ?\n", defaultValue: "false"
+    input name: 'loggingEnabled', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
 }
 
 ///
@@ -41,7 +40,18 @@ preferences {
 ///
 
 def installed() {
-    
+    installedUpdated()
+}
+
+def updated() {
+    installedUpdated()
+}
+
+def installedUpdated() {
+    unschedule()
+
+    // disable logging in 30 minutes
+    if (settings.loggingEnabled) runIn(1800, disableLogging)
 }
 
 def on() {
@@ -68,79 +78,130 @@ def refresh() {
 ///
 
 def parseWattsForStatus(watts) {
-	logDebug "parseWattsForStatus()"
+	logDebug 'parseWattsForStatus()'
+
 	// get the current status
-	def currentStatus = device.currentValue("status") ?: "";
+	def currentStatus = device.currentValue('status') ?: '';
     // check if running to save for later
-    if(currentStatus == "running") {
+    if(currentStatus == 'running') {
         state.wasRunning = true;
     }
-    logDebug "parseWattsForStatus() > wasRunning: ${state.wasRunning}";
-    
-	logDebug "parseWattsForStatus() > checking watt value";
-    logDebug "parseWattsForStatus() > watts: " + watts;
+
     logDebug "parseWattsForStatus() > currentStatus: ${currentStatus}";
+    logDebug "parseWattsForStatus() > wasRunning: ${state.wasRunning}";
+    logDebug "parseWattsForStatus() > watts: ${watts}";
     
     def isIdle = watts < wattThreshold;
-    logDebug "parseWattsForStatus() > isIdle: " + isIdle;
+    logDebug "parseWattsForStatus() > isIdle: ${isIdle}";
     
-    def minOffTimeMillis = minTimeOff * 60 * 1000;
-    logDebug "parseWattsForStatus() > minOffTimeMillis: " + minOffTimeMillis;
+    def minTimeOnMillis = (minTimeOn ?: 0) * 1000;
+    logDebug "parseWattsForStatus() > minTimeOnMillis: ${minTimeOnMillis}";
+
+    def minTimeOffMillis = (minTimeOff ?: 0) * 1000;
+    logDebug "parseWattsForStatus() > minTimeOffMillis: ${minTimeOffMillis}";
+
+    def now = now()
+
+    // check if we're *really* running
+    if (!isIdle && state.timeLastRunning) {
+        // we have been running before
+        // check if we have been running long enough
+        logDebug "parseWattsForStatus() > now: ${now}, state.timeLastRunning: ${state.timeLastRunning} ";
+
+        def lastHighDelta = (now - state.timeLastRunning)
+        logDebug "parseWattsForStatus() > lastHighDelta: ${lastHighDelta}";
+
+        if (lastHighDelta >= minTimeOnMillis) { 
+        	// Power has been high for long enough
+            // let isIdle remain false
+            logDebug 'parseWattsForStatus() > Min on time has been met, go running'
+            isIdle = false;
+        } 
+        else { 
+        	// Has a low time but hasn't reached the minTimOn yet, re-schedule another check for the future
+            // remain idle
+            def reSchedTime = (minTimeOnMillis - lastHighDelta) / 1000
+            logDebug "parseWattsForStatus() > Scheduling a refresh() in ${reSchedTime} seconds"
+            runIn(reSchedTime.longValue() + 2, refresh);
+            isIdle = true;
+        }
+    }
+    else if(!isIdle) {
+        // we're not idle (aka running) but we don't have a previous record of running
+        // save the current time and ignore this report
+        // remain idle
+        logDebug 'parseWattsForStatus() > No previous running record, ignoring for now'
+        state.timeLastRunning = now;
+        isIdle = true;
+        
+        // check again in a few seconds incase we don't receive any more updates
+        logDebug 'parseWattsForStatus() > Scheduling a refresh() in 5 seconds'
+        runIn(5, refresh)
+    }
+    else {
+        // we're idle, zero out lastTimeRunning
+        state.timeLastRunning = 0
+    }
     
     // check if we're *really* idle
     if(isIdle && state.timeLastIdle) {
     	// we have been idle before
         // check if we have been idle long enough
-        logDebug "parseWattsForStatus() > now(): " + now();
-        logDebug "parseWattsForStatus() > state.timeLastIdle: " + state.timeLastIdle;
-        def lastLowDelta = (now() - state.timeLastIdle)
-        logDebug "parseWattsForStatus() > lastLowDelta: " + lastLowDelta;
-        if (lastLowDelta >= minOffTimeMillis) { 
+        logDebug "parseWattsForStatus() > now(): ${now}";
+        logDebug "parseWattsForStatus() > state.timeLastIdle: ${state.timeLastIdle} ";
+
+        def lastLowDelta = (now - state.timeLastIdle)
+        logDebug "parseWattsForStatus() > lastLowDelta: ${lastLowDelta}";
+
+        if (lastLowDelta >= minTimeOffMillis) { 
         	// Power has been low for long enough
             // let isIdle remain true
-            logDebug "parseWattsForStatus() > Min off time has been met, let's go idle"
+            logDebug 'parseWattsForStatus() > Min off time has been met, go idle'
             isIdle = true;
-        } else { 
+        } 
+        else { 
         	// Has a low time but isn't done yet, re-schedule another check for the future
-            def reSchedTime = (minOffTimeMillis - lastLowDelta) / 1000
+            def reSchedTime = (minTimeOffMillis - lastLowDelta) / 1000
             logDebug "parseWattsForStatus() > Scheduling a refresh() in ${reSchedTime} seconds"
             runIn(reSchedTime.longValue() + 2, refresh);
             isIdle = false;
         }
-    } else if(isIdle) {
+    } 
+    else if(isIdle) {
     	// we're idle but we don't have a previous record
         // save the current time and ignore this report
         // return last known/current status
-        logDebug "parseWattsForStatus() > No previous idle record, ignoring for now"
-        state.timeLastIdle = now();
+        logDebug 'parseWattsForStatus() > No previous idle record, ignoring for now'
+        state.timeLastIdle = now;
         isIdle = false;
         
         // check again in a few seconds incase we don't receive any more updates
-        logDebug "parseWattsForStatus() > Scheduling a refresh() in ${minTimeOff} seconds"
-        runIn(minTimeOff + 2, refresh)
-    } else {
+        logDebug 'parseWattsForStatus() > Scheduling a refresh() in 5 seconds'
+        runIn(5, refresh)
+    }
+    else {
     	// we're not idle, zero out lastTimeIdle
-        state.timeLastIdle = false;
+        state.timeLastIdle = 0;
     }
     
-    logDebug "parseWattsForStatus() > isIdle after checks: " + isIdle;
+    logDebug "parseWattsForStatus() > isIdle after checks: ${isIdle}";
     
-    def finalState = "";
+    def finalState = '';
     if(isIdle && state.wasRunning) {
-        finalState = "finished"
-        sendEvent(name: "status", value: finalState)
+        finalState = 'finished'
+        sendEvent(name: 'status', value: finalState)
         switchOn()
     } else if (isIdle) {
-        finalState = "idle"
-        sendEvent(name: "status", value: finalState)
+        finalState = 'idle'
+        sendEvent(name: 'status', value: finalState)
         switchOff()
     } else {
-        finalState = "running"
-        sendEvent(name: "status", value: finalState)
+        finalState = 'running'
+        sendEvent(name: 'status', value: finalState)
         switchOff()
     }
     
-    logDebug "parseWattsForStatus() > finalState: " + finalState;
+    logDebug "parseWattsForStatus() > finalState: ${finalState}";
 }
             
 def switchOn() {
@@ -162,9 +223,14 @@ def resetFinished() {
 }
 
 void logDebug(str) {
-    if (isLogLevelDebug) {
+    if (loggingEnabled) {
         log.debug str
     }
+}
+
+void disableLogging() {
+	log.info 'Logging disabled.'
+	device.updateSetting('loggingEnabled',[value:'false',type:'bool'])
 }
 
 ///
