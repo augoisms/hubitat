@@ -14,6 +14,7 @@
  *  v1.0.1 - Made washer, dryer, and reset button optional
  *  v1.0.2 - Allow multiple notification devices
  *  v1.0.3 - Added support for contact sensors, TTS, time-based auto reset, and device labels (2021-01-17).
+ *  v1.0.4 - Bug fix (2021-01-18).
  *
  */
 
@@ -162,14 +163,14 @@ void resetHandler(evt) {
 void washerStatusHandler(evt) {
 	logDebug 'checking washer status'  
     def washer = getChildDevice('laundry-machine-washer')
-    String name = washer.getLabel() ?: 'Washer'
+    String name = washer?.getLabel() ?: 'Washer'
     statusCheck(washer, name, 'washerStatusHandler')
 }
 
 void dryerStatusHandler(evt) {
 	logDebug 'checking dryer status'   
     def dryer = getChildDevice('laundry-machine-dryer')
-    String name = washer.getLabel() ?: 'Dryer'
+    String name = dryer?.getLabel() ?: 'Dryer'
     statusCheck(dryer, name, 'dryerStatusHandler')
 }
 
