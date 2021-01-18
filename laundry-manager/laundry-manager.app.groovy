@@ -15,6 +15,7 @@
  *  v1.0.2 - Allow multiple notification devices
  *  v1.0.3 - Added support for contact sensors, TTS, time-based auto reset, and device labels (2021-01-17).
  *  v1.0.4 - Bug fix (2021-01-18).
+ *  v1.0.5 - More bug fixes (2021-01-18).
  *
  */
 
@@ -192,7 +193,7 @@ void dryerPowerHandler(evt) {
 
 void disableLogging() {
 	log.info 'Logging disabled.'
-	device.updateSetting('loggingEnabled',[value:'false',type:'bool'])
+	app?.updateSetting('loggingEnabled',[value:'false',type:'bool'])
 }
 
 void logDebug(str) {
