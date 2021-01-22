@@ -16,6 +16,7 @@
  *  v1.0.3 - Added support for contact sensors, TTS, time-based auto reset, and device labels (2021-01-17).
  *  v1.0.4 - Bug fix (2021-01-18).
  *  v1.0.5 - More bug fixes (2021-01-18).
+ *  v1.0.6 - Added support for overriding machine labels (2021-01-21).
  *
  */
 
@@ -58,6 +59,12 @@ def settings() {
                 input 'repeat', 'bool', title: 'Repeat notifications?'
                 if (repeat) input 'repeatInterval', 'number', title: 'Repeat interval (minutes)', defaultValue: 15, submitOnChange: true
                 input 'modes', 'mode', title: 'Only send notifications in specific modes', multiple: true, required: false
+            }
+
+            input 'labelOverride', 'bool', title: 'Override machine labels?', defaultValue: false, submitOnChange: true
+            if (labelOverride) {
+                input 'labelWasher', 'string', title: 'Washer label', defaultValue: 'Washer'
+                input 'labelDryer', 'string', title: 'Dryer label', defaultValue: 'Dryer'
             }
         }
 
@@ -164,14 +171,26 @@ void resetHandler(evt) {
 void washerStatusHandler(evt) {
 	logDebug 'checking washer status'  
     def washer = getChildDevice('laundry-machine-washer')
+
+    // get machine label
     String name = washer?.getLabel() ?: 'Washer'
+    if (labelOverride) {
+        name = labelWasher ?: name
+    }
+
     statusCheck(washer, name, 'washerStatusHandler')
 }
 
 void dryerStatusHandler(evt) {
 	logDebug 'checking dryer status'   
     def dryer = getChildDevice('laundry-machine-dryer')
+
+    // get machine label
     String name = dryer?.getLabel() ?: 'Dryer'
+    if (labelOverride) {
+        name = labelDryer ?: name
+    }
+    
     statusCheck(dryer, name, 'dryerStatusHandler')
 }
 

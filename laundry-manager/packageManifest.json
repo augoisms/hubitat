@@ -1,10 +1,10 @@
 {
   "packageName": "Laundry Manager",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minimumHEVersion": "2.2.0",
   "dateReleased": "2021-01-17",
-  "releaseNotes": "Added support for contact sensors, TTS, time-based auto reset, device labels, and time on threshold (2021-01-16).",
+  "releaseNotes": "Added support for contact sensors, TTS, time-based auto reset, and device labels (2021-01-21).",
   "communityLink": "https://community.hubitat.com/t/release-laundry-manager/30614",
   "drivers": [
     {
