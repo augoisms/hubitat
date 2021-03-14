@@ -16,6 +16,7 @@
  *  v1.0.3 - Added support for price & cost (2021-01-05)
  *  v1.0.4 - Added null check in hex conversion (2021-01-09)
  *  v1.0.5 - NetworkInfo parsing improvements, added status attribute (2021-01-11)
+ *  v1.1.0 - Add support to reset energy daily, add secondary cloud provider (ahndee, 2021-03-14)
  *
  */
 
@@ -41,6 +42,8 @@ preferences {
     input name: 'reportWatts', type: 'bool', title:'<b>Report Power in Watts?</b>', description: '<div><i>Default reporting is in kW. Energy is always in kWh.</i></div><br>', defaultValue: true
     input name: 'autoResetEnergy', type: 'enum', title: '<b>Automatically Reset Energy</b>', description: '<div><i>Reset energy on the specified day every month.</i></div></br>', options: daysOptions, defaultValue: 'Disabled'
     input name: 'loggingEnabled', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
+    input name: 'secondaryUploadEnabled', type: 'bool', title: '<b>Enable Secondary Uploader?</b>', description: '<div><i>Forward reports to secondary cloud provider.</i></div><br>', defaultValue: false
+    input name: 'secondaryUploadURL', type: 'string', title: '<b>Secondary Uploader URI</b>', description: '<div><i>Full URI to forward energy reports to.</i></div><br>'
 }
 
 def installed() {
@@ -64,9 +67,16 @@ void installedUpdated() {
 
     // schedule auto reset
     if (autoResetEnergy && autoResetEnergy != 'Disabled') {
-        schedule("0 0 0 ${autoResetEnergy} * ? *", 'resetEnergy')
+        if (autoResetEnergy == 'Daily') {
+            schedule("0 0 0 ? * * *", 'resetEnergy')
+        } else {
+            schedule("0 0 0 ${autoResetEnergy} * ? *", 'resetEnergy')
+        }
     }
 
+    if (settings.secondaryUploadEnabled && settings.secondaryUploadURL == '') {
+        settings.secondaryUploadEnabled = false
+    }
     // perform health check every 1 minutes
     runEvery1Minute('healthCheck') 
 }
@@ -107,6 +117,20 @@ def parse(String description) {
 
     if (body?.PriceCluster?.Price.text()) {
         parsePriceCluster(body.PriceCluster)
+    }
+
+    if (settings.secondaryUploadEnabled) {
+       def postParams = [
+                uri: settings.secondaryUploadURL,
+                body: msg.body,
+                headers: ["Content-Type": "application/xml"]
+            ]
+        try {    
+            httpPost(postParams) {}
+        }
+        catch (Exception e) {
+            logDebug "Secondary uploader hit exception ${e} on ${postParams}"
+        }
     }
 
     state.lastReport = now()
@@ -203,7 +227,7 @@ void parseCurrentSummation(summation) {
     
     if (state.energyStart) {
         // calculate energy
-        def totalEnergy = round2(deliveredValue - state.energyStart)
+        def totalEnergy = deliveredValue - receivedValue - state.energyStart
         sendEvent(name: 'energy', value: totalEnergy, unit: 'kWh')
 
         // calculate cost of total energy
@@ -212,7 +236,7 @@ void parseCurrentSummation(summation) {
     }
     else {
         // save value
-        state.energyStart = deliveredValue
+        state.energyStart = deliveredValue - receivedValue
         state.energyStartTimestamp = dateString
         sendEvent(name: 'energy', value: 0, unit: 'kWh')
         sendEvent(name: 'cost', value: 0)
@@ -284,7 +308,7 @@ void logDebug(str) {
     }
 }
 
-@Field static List daysOptions = ['Disabled','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31']
+@Field static List daysOptions = ['Disabled','Daily','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30','31']
 
 BigDecimal round2(BigDecimal value) {
     return Math.round(value * 100) / 100
