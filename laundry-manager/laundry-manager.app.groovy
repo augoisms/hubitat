@@ -17,6 +17,7 @@
  *  v1.0.4 - Bug fix (2021-01-18).
  *  v1.0.5 - More bug fixes (2021-01-18).
  *  v1.0.6 - Added support for overriding machine labels (2021-01-21).
+ *  v1.0.7 - Fix ttsModes bug (2021-03-21).
  *
  */
 
@@ -222,8 +223,9 @@ void logDebug(str) {
 }
 
 void send(msg) {
+    def modeOkay = !modes || modes.contains(location.mode)
+
     // push notifications
-	def modeOkay = !modes || modes.contains(location.mode)
     Boolean push = sendPushMessage == true || sendPushMessage == 'Yes'
     if (push && modeOkay) {
 		logDebug 'sending push message' 		
@@ -233,8 +235,7 @@ void send(msg) {
 	}
 
     // tts devices
-    def modeTTSOkay = !modesTTS || modesTTS.contains(location.mode)
-    if (sendTTS && modeTTSOkay) {
+    if (sendTTS && modeOkay) {
         logDebug 'sending TTS message'
         ttsDevices.each{ device ->
             device.speak(msg)

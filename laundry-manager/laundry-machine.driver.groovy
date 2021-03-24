@@ -13,6 +13,7 @@
  *  v1.0.0 - Initial version
  *  v1.0.3 - Added support for time on threshold (2021-01-17).
  *  v1.0.6 - Removed min time on support (2021-01-21).
+ *  v1.0.7 - Added min time on support (2021-03-21).
  *
  */
 metadata {
@@ -30,10 +31,10 @@ metadata {
 
 preferences {
     input name: 'wattThreshold', type: 'number', title: '<b>Watt Threshold</b>', description: '<div><i>Minimum watt value to trigger state</i></div><br>', defaultValue: '10'
-    // input name: 'minTimeOn', type: 'number', title: '<b>Time Threshold (On)</b>', description: '<div><i>Minimum time (seconds) watts need to stay above the threshold</i></div><br>', defaultValue: 15
+    input name: 'minTimeOn', type: 'number', title: '<b>Time Threshold (On)</b>', description: '<div><i>Minimum time (seconds) watts need to stay above the threshold</i></div><br>', defaultValue: 15
     input name: 'minTimeOff', type: 'number', title: '<b>Time Threshold (Off)</b>', description: '<div><i>Minimum time (seconds) watts need to stay below the threshold</i></div><br>', defaultValue: 120
 
-    input name: 'loggingEnabled', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
+    input name: 'loggingDuration', type: 'enum', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after selected time.</i></div><br>', options: [0: 'Disabled', 1800: '30 Minutes', 3600: '1 Hour', 86400: '24 Hours'], defaultValue: 0
 }
 
 ///
@@ -50,9 +51,11 @@ def updated() {
 
 def installedUpdated() {
     unschedule()
+    state.clear()
 
-    // disable logging in 30 minutes
-    if (settings.loggingEnabled) runIn(1800, disableLogging)
+    // disable logging automatically
+    Long loggingDuration = settings.loggingDuration as Long
+    if (loggingDuration > 0) runIn(loggingDuration, disableLogging)
 }
 
 def on() {
@@ -60,17 +63,17 @@ def on() {
 }
 
 def off() {
-    sendEvent(name: "switch", value: "off")
+    sendEvent(name: 'switch', value: 'off')
     resetFinished()
 }
 
 def push() {
-    sendEvent(name: "switch", value: "on")
+    sendEvent(name: 'switch', value: 'on')
     runIn(3, off)
 }
 
 def refresh() {
-    def watts = device.currentValue("power")
+    def watts = device.currentValue('power')
     parseWattsForStatus(watts)
 }
 
@@ -79,120 +82,118 @@ def refresh() {
 ///
 
 def parseWattsForStatus(watts) {
-	logDebug 'parseWattsForStatus()'
+    logDebug 'parseWattsForStatus()'
 
-	// get the current status
-	def currentStatus = device.currentValue('status') ?: '';
+    // get the current status
+    def currentStatus = device.currentValue('status') ?: '';
     // check if running to save for later
     if(currentStatus == 'running') {
         state.wasRunning = true;
     }
-
-    logDebug "parseWattsForStatus() > currentStatus: ${currentStatus}";
-    logDebug "parseWattsForStatus() > wasRunning: ${state.wasRunning}";
-    logDebug "parseWattsForStatus() > watts: ${watts}";
     
-    def isIdle = watts < wattThreshold;
-    logDebug "parseWattsForStatus() > isIdle: ${isIdle}";
+    Boolean isIdle = watts < wattThreshold;
+    logDebug "parseWattsForStatus() > watts: ${watts}, isIdle: ${isIdle}, currentStatus: ${currentStatus}, wasRunning: ${state.wasRunning}";
     
-    // def minTimeOnMillis = (minTimeOn ?: 0) * 1000;
-    // logDebug "parseWattsForStatus() > minTimeOnMillis: ${minTimeOnMillis}";
-
+    def minTimeOnMillis = (minTimeOn ?: 0) * 1000;
     def minTimeOffMillis = (minTimeOff ?: 0) * 1000;
-    logDebug "parseWattsForStatus() > minTimeOffMillis: ${minTimeOffMillis}";
+    logDebug "parseWattsForStatus() > minTimeOn: ${minTimeOnMillis}ms, minTimeOff: ${minTimeOffMillis}ms";
 
-    def now = now()
+    def now = now();
+    Boolean finalIdle = false;
 
     // check if we're *really* running
-    // if (!isIdle && state.timeLastRunning) {
-    //     // we have been running before
-    //     // check if we have been running long enough
-    //     logDebug "parseWattsForStatus() > now: ${now}, state.timeLastRunning: ${state.timeLastRunning} ";
+    if (!isIdle && state.timeFirstRunning) {
+        // we have been running before
+        // check if we have been running long enough
+        logDebug "parseWattsForStatus() > now: ${now}, state.timeFirstRunning: ${state.timeFirstRunning} ";
 
-    //     def lastHighDelta = (now - state.timeLastRunning)
-    //     logDebug "parseWattsForStatus() > lastHighDelta: ${lastHighDelta}";
+        def lastHighDelta = (now - state.timeFirstRunning)
+        logDebug "parseWattsForStatus() > lastHighDelta: ${lastHighDelta}";
 
-    //     if (lastHighDelta >= minTimeOnMillis) { 
-    //     	// Power has been high for long enough
-    //         // let isIdle remain false
-    //         logDebug 'parseWattsForStatus() > Min on time has been met, go running'
-    //         isIdle = false;
-    //     } 
-    //     else { 
-    //     	// Has a low time but hasn't reached the minTimOn yet, re-schedule another check for the future
-    //         // remain idle
-    //         def reSchedTime = (minTimeOnMillis - lastHighDelta) / 1000
-    //         logDebug "parseWattsForStatus() > Scheduling a refresh() in ${reSchedTime} seconds"
-    //         runIn(reSchedTime.longValue() + 2, refresh);
-    //         isIdle = true;
-    //     }
-    // }
-    // else if(!isIdle) {
-    //     // we're not idle (aka running) but we don't have a previous record of running
-    //     // save the current time and ignore this report
-    //     // remain idle
-    //     logDebug 'parseWattsForStatus() > No previous running record, ignoring for now'
-    //     state.timeLastRunning = now;
-    //     isIdle = true;
+        if (lastHighDelta >= minTimeOnMillis) { 
+            // Power has been high for long enough
+            // let isIdle remain false
+            logDebug 'parseWattsForStatus() > Min time on has been met, go running'
+            finalIdle = false;
+        } 
+        else { 
+            // Has a low time but hasn't reached the minTimOn yet, re-schedule another check for the future
+            // remain idle
+            def reSchedTime = (minTimeOnMillis - lastHighDelta) / 1000
+            logDebug "parseWattsForStatus() > Min time on has not been met. Scheduling a refresh() in ${reSchedTime} seconds"
+            runIn(reSchedTime.longValue() + 2, refresh);
+            finalIdle = true;
+        }
+    }
+    else if(!isIdle) {
+        // we're not idle (aka running) but we don't have a previous record of running
+        // save the current time and ignore this report
+        // remain idle
+        logDebug 'parseWattsForStatus() > No previous running record, ignoring for now'
+        state.timeFirstRunning = now;
+        finalIdle = true;
         
-    //     // check again in a few seconds incase we don't receive any more updates
-    //     logDebug 'parseWattsForStatus() > Scheduling a refresh() in 5 seconds'
-    //     runIn(5, refresh)
-    // }
-    // else {
-    //     // we're idle, zero out lastTimeRunning
-    //     state.timeLastRunning = 0
-    // }
+        // check again in a few seconds incase we don't receive any more updates
+        logDebug 'parseWattsForStatus() > Scheduling a refresh() in 5 seconds'
+        runIn(5, refresh)
+    }
     
+    // stay idle if we're already idle
+    if (isIdle && currentStatus == 'idle') {
+        finalIdle = true;
+        if (!state.timeFirstIdle) {
+            state.timeFirstIdle = now;
+        }
+    }
     // check if we're *really* idle
-    if(isIdle && state.timeLastIdle) {
-    	// we have been idle before
+    else if(isIdle && state.timeFirstIdle) {
+        // we have been idle before
         // check if we have been idle long enough
-        logDebug "parseWattsForStatus() > now(): ${now}";
-        logDebug "parseWattsForStatus() > state.timeLastIdle: ${state.timeLastIdle} ";
+        logDebug "parseWattsForStatus() > now: ${now}, state.timeFirstIdle: ${state.timeFirstIdle} ";
 
-        def lastLowDelta = (now - state.timeLastIdle)
+        def lastLowDelta = (now - state.timeFirstIdle)
         logDebug "parseWattsForStatus() > lastLowDelta: ${lastLowDelta}";
 
         if (lastLowDelta >= minTimeOffMillis) { 
-        	// Power has been low for long enough
+            // Power has been low for long enough
             // let isIdle remain true
-            logDebug 'parseWattsForStatus() > Min off time has been met, go idle'
-            isIdle = true;
+            logDebug 'parseWattsForStatus() > Min time off has been met, go idle'
+            finalIdle = true;
+
+            // since we're idle, zero out timeFirstRunning
+            state.timeFirstRunning = 0;
         } 
         else { 
-        	// Has a low time but isn't done yet, re-schedule another check for the future
+            // Has a low time but isn't done yet, re-schedule another check for the future
             def reSchedTime = (minTimeOffMillis - lastLowDelta) / 1000
-            logDebug "parseWattsForStatus() > Scheduling a refresh() in ${reSchedTime} seconds"
+            logDebug "parseWattsForStatus() > Min time off has not been met. Scheduling a refresh() in ${reSchedTime} seconds"
             runIn(reSchedTime.longValue() + 2, refresh);
-            isIdle = false;
+            finalIdle = false;
         }
     } 
     else if(isIdle) {
-    	// we're idle but we don't have a previous record
+        // we're idle but we don't have a previous record
         // save the current time and ignore this report
         // return last known/current status
         logDebug 'parseWattsForStatus() > No previous idle record, ignoring for now'
-        state.timeLastIdle = now;
-        isIdle = false;
+        state.timeFirstIdle = now;
+        finalIdle = false;
         
         // check again in a few seconds incase we don't receive any more updates
         logDebug 'parseWattsForStatus() > Scheduling a refresh() in 5 seconds'
         runIn(5, refresh)
     }
     else {
-    	// we're not idle, zero out lastTimeIdle
-        state.timeLastIdle = 0;
+        // we're not idle, zero out lastTimeIdle
+        state.timeFirstIdle = 0;
     }
     
-    logDebug "parseWattsForStatus() > isIdle after checks: ${isIdle}";
-    
-    def finalState = '';
-    if(isIdle && state.wasRunning) {
+    String finalState = '';
+    if(finalIdle && state.wasRunning) {
         finalState = 'finished'
         sendEvent(name: 'status', value: finalState)
         switchOn()
-    } else if (isIdle) {
+    } else if (finalIdle) {
         finalState = 'idle'
         sendEvent(name: 'status', value: finalState)
         switchOff()
@@ -202,36 +203,37 @@ def parseWattsForStatus(watts) {
         switchOff()
     }
     
-    logDebug "parseWattsForStatus() > finalState: ${finalState}";
+    logDebug "parseWattsForStatus() > findleIdle: ${finalIdle}, finalState: ${finalState}";
 }
             
 def switchOn() {
-    if (device.currentValue("switch") != "on") {   
-        sendEvent(name: "switch", value: "on")
+    if (device.currentValue('switch') != 'on') {   
+        sendEvent(name: 'switch', value: 'on')
     }
 }
 
 def switchOff() {
-    if (device.currentValue("switch") != "off") {   
-        sendEvent(name: "switch", value: "off")
+    if (device.currentValue('switch') != 'off') {   
+        sendEvent(name: 'switch', value: 'off')
     }
 }
 
 def resetFinished() {    
-	state.wasRunning = false;
+    state.wasRunning = false;
     logDebug "resetFinished() > wasRunning: ${state.wasRunning}";
     refresh();
 }
 
 void logDebug(str) {
-    if (loggingEnabled) {
+    Long loggingDuration = settings.loggingDuration as Long
+    if (loggingDuration > 0) {
         log.debug str
     }
 }
 
 void disableLogging() {
-	log.info 'Logging disabled.'
-	device.updateSetting('loggingEnabled',[value:'false',type:'bool'])
+    log.info 'Logging disabled.'
+    device.updateSetting('loggingDuration',[value: '0',type:'enum'])
 }
 
 ///
