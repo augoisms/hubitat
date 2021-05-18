@@ -10,7 +10,8 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  v1.0.0 - initial version
+ *  v1.0.0 - Initial version
+ *  v1.0.1 - Added option to reverse on/off direction (2021-05-18)
  *
  */
 
@@ -45,6 +46,7 @@ metadata {
 	preferences {
 		input name: "travelDuration", type: "number", title:"<b>Travel Duration</b> (seconds)", description: "<div><i>Approximate duration that it takes your shade to open/close.</i></div><br>", required: true, defaultValue: 6
 		input name: "myPositionlevel", type: "bool", title:"<b>50% For My Position</b>", description: "<div><i>If the setPosition value is 50 and this option is enabled, the My/Stop command will be sent instead.</i></div><br>", required: true, defaultValue: true
+		input name: "reverseDirection", type: "bool", title: "Reverse On/Off Direction?", defaultValue: false
 		input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
         input name: "txtEnable", type: "bool", title: "Enable text logging", defaultValue: false
 	}
@@ -119,16 +121,20 @@ List<String> commands(List<hubitat.zwave.Command> cmds, Long delay=200) {
 /// commands
 ///
 
+@Field static BigDecimal COMMAND_ON = 0xFF
+
+@Field static BigDecimal COMMAND_OFF = 0x00
+
 void on() {
 	logDebug "on()"	
-	sendToDevice(zwave.basicV1.basicSet(value: 0xFF))	
+	sendToDevice(zwave.basicV1.basicSet(value: reverseDirection ? COMMAND_OFF : COMMAND_ON))	
 	sendOpeningClosingEvent(99)
 	runIn(travelDuration, 'sendEvents', [data: [level: 99]]);
 }
 
 void off() {
 	logDebug "off()"	
-	sendToDevice(zwave.basicV1.basicSet(value: 0x00))
+	sendToDevice(zwave.basicV1.basicSet(value: reverseDirection ? COMMAND_ON : COMMAND_OFF))
 	sendOpeningClosingEvent(0)
 	runIn(travelDuration, 'sendEvents', [data: [level:0]]);
 }
