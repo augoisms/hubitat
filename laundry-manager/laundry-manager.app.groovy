@@ -18,6 +18,7 @@
  *  v1.0.5 - More bug fixes (2021-01-18).
  *  v1.0.6 - Added support for overriding machine labels (2021-01-21).
  *  v1.0.7 - Fix ttsModes bug (2021-03-21).
+ *  v1.0.8 - Fix for finished to idle, added support for dishwasher (2021-08-29).
  *
  */
 
@@ -41,6 +42,7 @@ def settings() {
         section('<b>Machines</b><hr>') {
             input 'washerMeter', 'capability.powerMeter', title: 'Washer Power Meter'
             input 'dryerMeter', 'capability.powerMeter', title: 'Dryer Power Meter'
+            input 'dishwasherMeter', 'capability.powerMeter', title: 'Dishwasher Power Meter'
         }
         section('<b>Reset</b><hr>') {
             paragraph '<div><i>Automatically reset any finished machine back to idle by subscribing to a button or contact sensor.</i></div>'
@@ -66,6 +68,7 @@ def settings() {
             if (labelOverride) {
                 input 'labelWasher', 'string', title: 'Washer label', defaultValue: 'Washer'
                 input 'labelDryer', 'string', title: 'Dryer label', defaultValue: 'Dryer'
+                input 'labelDishwasher', 'string', title: 'Dishwasher label', defaultValue: 'Dishwasher'
             }
         }
 
@@ -96,6 +99,8 @@ void init() {
     // subscribe to device events
     washerMeter && subscribe(washerMeter, 'power', washerPowerHandler)
     dryerMeter && subscribe(dryerMeter, 'power', dryerPowerHandler) 
+    dishwasherMeter && subscribe(dishwasherMeter, 'power', dishwasherPowerHandler)
+
     resetButton && subscribe(resetButton, 'pushed', resetHandler)
     resetContacts && subscribe(resetContacts, 'contact', resetHandler)
 	 
@@ -111,6 +116,7 @@ void createChildren() {
     
     washerMeter && createChild('laundry-machine-washer', 'Laundry Washer')
     dryerMeter && createChild('laundry-machine-dryer', 'Laundry Dryer')
+    dishwasherMeter && createChild('laundry-machine-dishwasher', 'Dishwasher')
 }
 
 void createChild(dni, label) {
@@ -143,6 +149,11 @@ void subscribeToChild(child){
         subscribe(child, 'status', dryerStatusHandler)
         dryerPowerHandler()
     }
+
+    if (child.deviceNetworkId == 'laundry-machine-dishwasher') {
+        subscribe(child, 'status', dishwasherStatusHandler)
+        dishwasherStatusHandler()
+    }
 }
 
 void removeChildDevices(delete) {
@@ -157,15 +168,21 @@ void resetHandler(evt) {
 	logDebug 'button pushed'
     
     def washer = getChildDevice('laundry-machine-washer')
-    if(washer.currentValue('status') == 'finished') {
+    if(washer?.currentValue('status') == 'finished') {
     	logDebug 'resetting washer'
         washer.resetFinished()
     }
     
     def dryer = getChildDevice('laundry-machine-dryer')
-    if(dryer.currentValue('status') == 'finished') {
+    if(dryer?.currentValue('status') == 'finished') {
     	logDebug 'resetting dryer'
         dryer.resetFinished()
+    }
+
+    def dishwasher = getChildDevice('laundry-machine-dishwasher')
+    if(dishwasher?.currentValue('status') == 'finished') {
+    	logDebug 'resetting dishwasher'
+        dishwasher.resetFinished()
     }
 }
 
@@ -195,6 +212,19 @@ void dryerStatusHandler(evt) {
     statusCheck(dryer, name, 'dryerStatusHandler')
 }
 
+void dishwasherStatusHandler(evt) {
+	logDebug 'checking dishwasher status'   
+    def dishwasher = getChildDevice('laundry-machine-dishwasher')
+
+    // get machine label
+    String name = dishwasher?.getLabel() ?: 'Dishwasher'
+    if (labelOverride) {
+        name = labelDishwasher ?: name
+    }
+    
+    statusCheck(dishwasher, name, 'dishwasherStatusHandler')
+}
+
 void washerPowerHandler(evt) {
     def watts = washerMeter.currentValue('power')
     def washer = getChildDevice('laundry-machine-washer')
@@ -205,6 +235,12 @@ void dryerPowerHandler(evt) {
     def watts = dryerMeter.currentValue('power')
     def dryer = getChildDevice('laundry-machine-dryer')
     dryer.updatePower(watts)
+}
+
+void dishwasherPowerHandler(evt) {
+    def watts = dishwasherMeter.currentValue('power')
+    def dishwasher = getChildDevice('laundry-machine-dishwasher')
+    dishwasher.updatePower(watts)
 }
 
 ///

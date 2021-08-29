@@ -1,10 +1,10 @@
 {
   "packageName": "Laundry Manager",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2021-03-21",
-  "releaseNotes": "Added min time on support, and fixed tts modes bug (2021-03-21).",
+  "dateReleased": "2021-08-29",
+  "releaseNotes": "Fix for finished to idle, added support for dishwasher (2021-08-29).",
   "communityLink": "https://community.hubitat.com/t/release-laundry-manager/30614",
   "drivers": [
     {

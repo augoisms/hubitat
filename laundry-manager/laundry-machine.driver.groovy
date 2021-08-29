@@ -14,6 +14,7 @@
  *  v1.0.3 - Added support for time on threshold (2021-01-17).
  *  v1.0.6 - Removed min time on support (2021-01-21).
  *  v1.0.7 - Added min time on support (2021-03-21).
+ *  v1.0.8 - Fix for finished to idle, added support for dishwasher (2021-08-29).
  *
  */
 metadata {
@@ -144,6 +145,8 @@ def parseWattsForStatus(watts) {
         if (!state.timeFirstIdle) {
             state.timeFirstIdle = now;
         }
+        // since we're idle, zero out timeFirstRunning
+        state.timeFirstRunning = 0
     }
     // check if we're *really* idle
     else if(isIdle && state.timeFirstIdle) {
@@ -170,7 +173,16 @@ def parseWattsForStatus(watts) {
             runIn(reSchedTime.longValue() + 2, refresh);
             finalIdle = false;
         }
-    } 
+    }
+    // this case happens when you don't reset from finished to idle
+    else if (isIdle && currentStatus == 'finished') {
+        // we've gone from finished to idle. allow this to go through
+        // backdate timeFirstIdle to allow idle status to stick
+        logDebug 'parseWattsForStatus() > Going from finished to idle'
+        state.timeFirstIdle = now - minTimeOffMillis;
+        state.timeFirstRunning = 0
+        finalIdle = true;
+    }
     else if(isIdle) {
         // we're idle but we don't have a previous record
         // save the current time and ignore this report
