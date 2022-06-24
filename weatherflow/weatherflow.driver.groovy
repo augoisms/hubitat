@@ -17,6 +17,7 @@
  *  v1.0.4 - added support for publish rate, reducing resolution, and precipication rate (2020-08-01)
  *  v1.0.5 - bug fixes (2020-08-02)
  *  v1.0.6 - added null handling and battery status (2020-08-23)
+ *  v1.0.7 - added water sensor capability
  *
  */
 
@@ -30,6 +31,7 @@ metadata {
         capability 'PressureMeasurement'
         capability 'RelativeHumidityMeasurement'
         capability 'Sensor'
+        capability "WaterSensor"
         capability 'TemperatureMeasurement'
         capability 'UltravioletIndex'
 
@@ -143,6 +145,7 @@ def parse(String description) {
                 break
             case 'evt_precip':
                 sendEvent(name: 'precipitationType', value: 'rain')
+                sendEvent(name: 'water', value: 'wet')
                 logDebug 'precipitationType: rain'
                 break
             case 'evt_strike':
@@ -454,6 +457,8 @@ void parseObservation(Map response) {
         if (field == 'precipitation_type') {
             Map precipType = formatPrecipitationType(it)
             sendEvent(name: 'precipitationType', value: precipType.value)
+            if (precipType.value == 'none') sendEvent(name: 'water', value: "dry")
+            else sendEvent(name: 'water', value: "wet")
             logDebug "${field}: ${precipType.value}"
         }
 
