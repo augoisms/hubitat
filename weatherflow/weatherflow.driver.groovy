@@ -31,7 +31,7 @@ metadata {
         capability 'PressureMeasurement'
         capability 'RelativeHumidityMeasurement'
         capability 'Sensor'
-        capability "WaterSensor"
+        capability 'WaterSensor'
         capability 'TemperatureMeasurement'
         capability 'UltravioletIndex'
 
@@ -52,7 +52,7 @@ metadata {
     preferences {
         input name: 'apiKey', type: 'string', title: '<b>WeatherFlow API Key</b>', description: '<div><i>Visit: <a href="https://weatherflow.github.io/SmartWeather/api/" target="_blank">WeatherFlow Smart Weather API</a></i></div><br>', required: true
         input name: 'stationId', type: 'string', title: '<b>Station ID</b>', description: '<div><i>ID of your station/hub.</i></div><br>', required: true
-        
+
         if (connectionValidated()) {
             getStationDevices().each { k,v ->
                 input name: "device_" + k, type: 'bool', title: "<b>Device: ${v}</b>", description: "<div><i>Subscribe to ${v} (${k}).</i></div><br>", required: true
@@ -91,10 +91,10 @@ void updated() {
     unschedule()
 
     // perform health check every 5 minutes
-    runEvery5Minutes('healthCheck')   
+    runEvery5Minutes('healthCheck')
 
     // disable logs in 30 minutes
-    if (settings.logEnable) runIn(1800, logsOff) 
+    if (settings.logEnable) runIn(1800, logsOff)
 
     initialize()
 }
@@ -116,11 +116,11 @@ void initialize() {
     // generate a new ws id
     String ws_id = UUID.randomUUID().toString()
     updateDataValue('ws_id', ws_id)
-    
+
     try {
         // connect webSocket to weatherflow
         interfaces.webSocket.connect("wss://ws.weatherflow.com/swd/data?api_key=${apiKey}")
-    } 
+    }
     catch (e) {
         log.error "webSocket.connect failed: ${e.message}"
     }
@@ -128,7 +128,7 @@ void initialize() {
 
 def parse(String description) {
     logDebug "parsed: $description"
-    
+
     try {
         def response = null;
         response = new groovy.json.JsonSlurper().parseText(description)
@@ -159,10 +159,10 @@ def parse(String description) {
                 log.warn "Unhandled event: ${response}"
                 break
         }
-    }  
+    }
     catch(e) {
         log.error "Failed to parse json e = ${e}"
-        log.debug description 
+        log.debug description
         return
     }
 }
@@ -171,7 +171,7 @@ def parse(String description) {
 /// station metadata
 ///
 
-Boolean connectionValidated() {   
+Boolean connectionValidated() {
     // api key and stationId are required
     if(!apiKey || !stationId) {
         log.warn 'apiKey and stationId are required'
@@ -179,7 +179,7 @@ Boolean connectionValidated() {
     }
 
     // check for cached results
-    if (getDataValue('devices')) return true 
+    if (getDataValue('devices')) return true
 
     Boolean validated = false
 
@@ -190,11 +190,11 @@ Boolean connectionValidated() {
             contentType: 'application/json'
         ]
 
-        httpGet(params) { response -> 
+        httpGet(params) { response ->
             if (response.status != 200) {
                 log.warn "Could not get station metadata. Error: ${response.status}"
             }
-            else {                
+            else {
                 List devices = []
                 response.data.stations[0].devices.each { it ->
                     // a device wihout a serial_number indicates that device is no longer active
@@ -220,7 +220,7 @@ Boolean connectionValidated() {
 
                 // save station elevation
                 updateDataValue('station_elevation', "${response.data.stations[0].station_meta.elevation}")
-                
+
                 validated = true
             }
         }
@@ -239,7 +239,7 @@ Map getStationDevices() {
     ArrayList devices = new groovy.json.JsonSlurper().parseText(deviceData)
     Map deviceConfig = [:]
 
-    devices.each { it -> 
+    devices.each { it ->
         deviceConfig << ["${it.device_id}":it.name]
     }
 
@@ -257,8 +257,8 @@ void webSocketStatus(String status){
         log.warn "failure message from web socket ${status}"
         state.connection = 'disconnected'
         reconnectWebSocket()
-    } 
-    else if (status == 'status: open') {        
+    }
+    else if (status == 'status: open') {
         log.info 'webSocket is open'
         state.connection = 'connected'
 
@@ -267,11 +267,11 @@ void webSocketStatus(String status){
         // success! reset reconnect delay
         pauseExecution(1000)
         state.reconnectDelay = 1
-    } 
+    }
     else if (status == 'status: closing'){
         log.warn 'webSocket connection closing.'
         state.connection = 'closing'
-    } 
+    }
     else {
         log.warn "webSocket error: ${status}"
         state.connection = 'disconnected'
@@ -417,7 +417,7 @@ void parseObservation(Map response) {
             break
     }
 
-    response.obs[0].eachWithIndex { it, i -> 
+    response.obs[0].eachWithIndex { it, i ->
         String field = obsMap[i]
 
         // do not process null values
@@ -425,7 +425,7 @@ void parseObservation(Map response) {
             // rain_accumulation_final and local_day_rain_accumulation_final are frequently null, so don't warn
             if (field != 'rain_accumulation_final' && field != 'local_day_rain_accumulation_final') {
                 log.warn "null values for ${field}"
-            }            
+            }
             return
         }
 
@@ -434,7 +434,7 @@ void parseObservation(Map response) {
             sendEvent(name: 'temperature', value: temp.value, unit: temp.unit)
             logDebug "${field}: ${temp.value} ${temp.unit}"
         }
-        
+
         if (publishAll && field == 'battery') {
             String battery = formatBattery(it, response.type)
             state["battery_${response.device_id}"] = battery
@@ -446,7 +446,7 @@ void parseObservation(Map response) {
             sendEvent(name: 'illuminance', value: illuminance.value, unit: illuminance.unit)
             logDebug "${field}: ${illuminance.value} ${illuminance.unit}"
         }
-        
+
         if (publishAll && field == 'local_day_rain_accumulation') {
             Map precipAmount = formatPrecipitationAmount(it)
             sendEvent(name: 'precipitationToday', value: precipAmount.value, unit: precipAmount.unit)
@@ -457,8 +457,8 @@ void parseObservation(Map response) {
         if (field == 'precipitation_type') {
             Map precipType = formatPrecipitationType(it)
             sendEvent(name: 'precipitationType', value: precipType.value)
-            if (precipType.value == 'none') sendEvent(name: 'water', value: "dry")
-            else sendEvent(name: 'water', value: "wet")
+            if (precipType.value == 'none') sendEvent(name: 'water', value: 'dry')
+            else sendEvent(name: 'water', value: 'wet')
             logDebug "${field}: ${precipType.value}"
         }
 
@@ -503,7 +503,7 @@ void parseObservation(Map response) {
             Map windDirection = formatWindDirection(it)
             sendEvent(name: 'windDirection', value: windDirection.value, unit: windDirection.unit)
             logDebug "${field}: ${windDirection.value} ${windDirection.unit}"
-        }        
+        }
     }
 
     if (publishAll && response.containsKey('summary')) parseSummary(response)
@@ -541,22 +541,22 @@ BigDecimal parsePrecipitationRate(BigDecimal rate)  {
 void parseSummary(Map response) {
     if (response.summary.containsKey('pressure_trend') && response.summary.pressure_trend != null) {
         sendEvent(name: 'pressureTrend', value: response.summary.pressure_trend)
-    }    
-    
+    }
+
     if (response.summary.containsKey('feels_like') && response.summary.feels_like != null) {
         Map feelsLike = formatTemp(response.summary.feels_like)
         sendEvent(name: 'feelsLike', value: feelsLike.value, unit: feelsLike.unit)
     }
-    
+
     if (response.summary.containsKey('heat_index') && response.summary.heat_index != null) {
         Map heatIndex = formatTemp(response.summary.heat_index)
         sendEvent(name: 'heatIndex', value: heatIndex.value, unit: heatIndex.unit)
     }
-    
+
     if (response.summary.containsKey('wind_chill') && response.summary.wind_chill != null) {
         Map windChill = formatTemp(response.summary.wind_chill)
         sendEvent(name: 'windChill', value: windChill.value, unit: windChill.unit)
-    }    
+    }
 }
 
 ///

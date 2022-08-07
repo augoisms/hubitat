@@ -1,10 +1,10 @@
 {
   "packageName": "WeatherFlow Lite",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2020-08-23",
-  "releaseNotes": "Added null handling and battery status.",
+  "dateReleased": "2022-08-07",
+  "releaseNotes": "Added water sensor capability.",
   "communityLink": "https://community.hubitat.com/t/release-weatherflow-lite/44674",
   "drivers": [
     {
