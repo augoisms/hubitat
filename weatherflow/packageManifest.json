@@ -1,10 +1,10 @@
 {
   "packageName": "WeatherFlow Lite",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2022-08-07",
-  "releaseNotes": "Added water sensor capability.",
+  "dateReleased": "2022-09-20",
+  "releaseNotes": "Added dewpoint calculations, cleanups, and fixes for parsing errors. Thanks to @imnotbob.",
   "communityLink": "https://community.hubitat.com/t/release-weatherflow-lite/44674",
   "drivers": [
     {

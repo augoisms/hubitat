@@ -18,7 +18,7 @@
  *  v1.0.5 - bug fixes (2020-08-02)
  *  v1.0.6 - added null handling and battery status (2020-08-23)
  *  v1.0.7 - added water sensor capability
- *  v1.0.8 - added dewpoint calculations, cleanups (2022-09-19)
+ *  v1.0.8 - added dewpoint calculations, cleanups, fixes for parsing errors (2022-09-20, @imnotbob)
  *
  */
 
@@ -38,7 +38,7 @@ metadata {
 
         attribute 'feelsLike', 'string'
         attribute 'heatIndex', 'number'
-	attribute 'dewpoint', 'number'
+	    attribute 'dewpoint', 'number'
         attribute 'pressureTrend', 'enum', ['steady', 'falling', 'rising']
         attribute 'precipitationRate', 'number'
         attribute 'precipitationToday', 'number'
@@ -169,7 +169,7 @@ def parse(String description) {
 		String aa,bb
 		aa=getExceptionMessageWithLine(e)
 		bb=getStackTrace(e)
-		log.error "Failed to parse json e = ${e} "+aa + " \n"+bb 
+		log.error "Failed to parse json e = ${e} "+aa + " \n"+bb
         log.debug description
         return
     }
@@ -238,7 +238,7 @@ Boolean connectionValidated() {
 		String aa,bb
 		aa=getExceptionMessageWithLine(e)
 		bb=getStackTrace(e)
-		log.error e.message+" " + aa + " \n" + bb 
+		log.error e.message+" " + aa + " \n" + bb
     }
 
     return validated
@@ -292,7 +292,7 @@ void webSocketStatus(String status){
 }
 
 void reconnectWebSocket() {
-    // first delay is 2 seconds, doubles every time
+    // first delay is 10 seconds, doubles every time
     state.reconnectDelay = (state.reconnectDelay ?: 10) * 2
 
     // don't let delay get too crazy, max it out at 10 minutes
