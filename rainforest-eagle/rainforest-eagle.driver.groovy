@@ -17,6 +17,7 @@
  *  v1.0.4 - Added null check in hex conversion (2021-01-09)
  *  v1.0.5 - NetworkInfo parsing improvements, added status attribute (2021-01-11)
  *  v1.1.0 - Add support to reset energy daily, add secondary cloud provider (ahndee, 2021-03-14)
+ *  v1.1.1 - Replaced loggingEnabled with txtEnable to conform with built-in drivers and consolidate Hubitat Preference Manager entries for better user experience (2022-10-06)
  *
  */
 
