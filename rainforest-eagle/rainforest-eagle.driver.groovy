@@ -41,7 +41,7 @@ preferences {
     input name: 'eagleIP', type: 'string', title:'<b>Eagle IP Address</b>', description: '<div><i>Please use a static IP.</i></div><br>', required: true
     input name: 'reportWatts', type: 'bool', title:'<b>Report Power in Watts?</b>', description: '<div><i>Default reporting is in kW. Energy is always in kWh.</i></div><br>', defaultValue: true
     input name: 'autoResetEnergy', type: 'enum', title: '<b>Automatically Reset Energy</b>', description: '<div><i>Reset energy on the specified day every month.</i></div></br>', options: daysOptions, defaultValue: 'Disabled'
-    input name: 'loggingEnabled', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
+    input name: 'txtEnable', type: 'bool', title: 'Enable descriptionText logging', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
     input name: 'secondaryUploadEnabled', type: 'bool', title: '<b>Enable Secondary Uploader?</b>', description: '<div><i>Forward reports to secondary cloud provider.</i></div><br>', defaultValue: false
     input name: 'secondaryUploadURL', type: 'string', title: '<b>Secondary Uploader URI</b>', description: '<div><i>Full URI to forward energy reports to.</i></div><br>'
 }
@@ -63,7 +63,7 @@ void installedUpdated() {
     setNetworkAddress()
 
     // disable logging in 30 minutes
-    if (settings.loggingEnabled) runIn(1800, disableLogging)
+    if (settings.txtEnable) runIn(1800, disableLogging)
 
     // schedule auto reset
     if (autoResetEnergy && autoResetEnergy != 'Disabled') {
@@ -299,11 +299,11 @@ private String utc2000ToDate(int seconds) {
 
 void disableLogging() {
 	log.info 'Logging disabled.'
-	device.updateSetting('loggingEnabled',[value:'false',type:'bool'])
+	device.updateSetting('txtEnable',[value:'false',type:'bool'])
 }
 
 void logDebug(str) {
-    if (loggingEnabled) {
+    if (txtEnable) {
         log.debug str
     }
 }
