@@ -19,6 +19,7 @@
  *  v1.0.6 - added null handling and battery status (2020-08-23)
  *  v1.0.7 - added water sensor capability
  *  v1.0.8 - added dewpoint calculations, cleanups, fixes for parsing errors (2022-09-20, @imnotbob)
+ *  v1.0.9 - Fix for api key error (2023-03-03)
  *
  */
 
@@ -121,7 +122,7 @@ void initialize() {
 
     try {
         // connect webSocket to weatherflow
-        interfaces.webSocket.connect("wss://ws.weatherflow.com/swd/data?api_key=${apiKey}")
+        interfaces.webSocket.connect("wss://ws.weatherflow.com/swd/data?token=${apiKey}")
     }
     catch (e) {
 		String aa,bb
@@ -193,7 +194,7 @@ Boolean connectionValidated() {
 
     try {
         Map params = [
-            uri: "https://swd.weatherflow.com/swd/rest/stations/${settings.stationId}?api_key=${settings.apiKey}",
+            uri: "https://swd.weatherflow.com/swd/rest/stations/${settings.stationId}?token=${settings.apiKey}",
             requestContentType: 'application/json',
             contentType: 'application/json',
             timeout: 20
