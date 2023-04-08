@@ -17,6 +17,7 @@
  *  v1.0.4 - Added null check in hex conversion (2021-01-09)
  *  v1.0.5 - NetworkInfo parsing improvements, added status attribute (2021-01-11)
  *  v1.1.0 - Add support to reset energy daily, add secondary cloud provider (ahndee, 2021-03-14)
+ *  v1.1.1 - Rename preference to logEnable to align with native drivers (2023-04-08)
  *
  */
 
@@ -41,7 +42,7 @@ preferences {
     input name: 'eagleIP', type: 'string', title:'<b>Eagle IP Address</b>', description: '<div><i>Please use a static IP.</i></div><br>', required: true
     input name: 'reportWatts', type: 'bool', title:'<b>Report Power in Watts?</b>', description: '<div><i>Default reporting is in kW. Energy is always in kWh.</i></div><br>', defaultValue: true
     input name: 'autoResetEnergy', type: 'enum', title: '<b>Automatically Reset Energy</b>', description: '<div><i>Reset energy on the specified day every month.</i></div></br>', options: daysOptions, defaultValue: 'Disabled'
-    input name: 'loggingEnabled', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
+    input name: 'logEnable', type: 'bool', title: '<b>Enable Logging?</b>', description: '<div><i>Automatically disables after 30 minutes.</i></div><br>', defaultValue: false
     input name: 'secondaryUploadEnabled', type: 'bool', title: '<b>Enable Secondary Uploader?</b>', description: '<div><i>Forward reports to secondary cloud provider.</i></div><br>', defaultValue: false
     input name: 'secondaryUploadURL', type: 'string', title: '<b>Secondary Uploader URI</b>', description: '<div><i>Full URI to forward energy reports to.</i></div><br>'
 }
@@ -63,7 +64,7 @@ void installedUpdated() {
     setNetworkAddress()
 
     // disable logging in 30 minutes
-    if (settings.loggingEnabled) runIn(1800, disableLogging)
+    if (settings.logEnable) runIn(1800, disableLogging)
 
     // schedule auto reset
     if (autoResetEnergy && autoResetEnergy != 'Disabled') {
@@ -78,30 +79,30 @@ void installedUpdated() {
         settings.secondaryUploadEnabled = false
     }
     // perform health check every 1 minutes
-    runEvery1Minute('healthCheck') 
+    runEvery1Minute('healthCheck')
 }
 
 // parse events into attributes
 def parse(String description) {
     logDebug "Parsing '${description}'"
 
-    def msg = parseLanMessage(description)   
+    def msg = parseLanMessage(description)
     def body = new XmlSlurper().parseText(new String(msg.body))
-    logDebug groovy.xml.XmlUtil.escapeXml(msg.body) 
+    logDebug groovy.xml.XmlUtil.escapeXml(msg.body)
 
-    if (body?.InstantaneousDemand?.Demand.text()) { 
+    if (body?.InstantaneousDemand?.Demand.text()) {
         parseInstantaneousDemand(body.InstantaneousDemand)
     }
 
-    if (body?.DeviceInfo?.DeviceMacId.text()) { 
+    if (body?.DeviceInfo?.DeviceMacId.text()) {
         parseDeviceInfo(body.DeviceInfo)
     }
 
-    if (body?.NetworkInfo?.DeviceMacId.text()) { 
+    if (body?.NetworkInfo?.DeviceMacId.text()) {
         parseNetworkInfo(body.NetworkInfo)
     }
 
-    if (body?.ConnectionStatus?.DeviceMacId.text()) { 
+    if (body?.ConnectionStatus?.DeviceMacId.text()) {
         parseNetworkInfo(body.ConnectionStatus)
     }
 
@@ -125,7 +126,7 @@ def parse(String description) {
                 body: msg.body,
                 headers: ["Content-Type": "application/xml"]
             ]
-        try {    
+        try {
             httpPost(postParams) {}
         }
         catch (Exception e) {
@@ -157,7 +158,7 @@ void setNetworkAddress() {
 
 void parseInstantaneousDemand(InstantaneousDemand) {
     logDebug "Adding InstantaneousDemand"
-    
+
     int demand = convertHexToInt(InstantaneousDemand.Demand.text())
 
     int multiplier = convertHexToInt(InstantaneousDemand.Multiplier.text())
@@ -165,13 +166,13 @@ void parseInstantaneousDemand(InstantaneousDemand) {
 
     int divisor = convertHexToInt(InstantaneousDemand.Divisor.text())
     if (divisor == 0) { divisor = 1 }
-    
+
     def value = (demand * multiplier) / divisor
     def reportedValue = reportWatts ? Math.round(value * 1000) : value
     def unit = reportWatts ? 'W' : 'kW'
-    
+
     logDebug "Current Demand: ${reportedValue}"
-    
+
     sendEvent(name: 'power', value: reportedValue, unit: unit)
 
     // calculate estimated cost per hour
@@ -194,10 +195,10 @@ void parseDeviceInfo(deviceInfo) {
 void parseNetworkInfo(networkInfo) {
     // only parse zigbee network info
     if (getDataValue('zigbeeMacId') != networkInfo.DeviceMacId.text()) return
-    
+
     // CoordMacId (Eagle 100), MeterMacId (Eagle 200)
-    updateDeviceData('meterMacId', networkInfo.CoordMacId.text() ?: networkInfo.MeterMacId.text()) 
-       
+    updateDeviceData('meterMacId', networkInfo.CoordMacId.text() ?: networkInfo.MeterMacId.text())
+
     sendEvent(name: 'status', value: networkInfo.Status.text())
     state.channel = networkInfo.Channel.text()
     state.connectionStrength = convertHexToInt(networkInfo.LinkStrength.text()) + "%"
@@ -207,10 +208,10 @@ void parseCurrentSummation(summation) {
     int delivered = convertHexToInt(summation.SummationDelivered.text())
     int received = convertHexToInt(summation.SummationReceived.text())
 
-    // TimeStamp - 8 hex digits 
+    // TimeStamp - 8 hex digits
     // UTC Time (offset in seconds from 00:00:00 01Jan2000) when data received from meter.
     int timestamp = convertHexToInt(summation.TimeStamp.text())
-    def dateString = utc2000ToDate(timestamp) 
+    def dateString = utc2000ToDate(timestamp)
 
     int multiplier = convertHexToInt(summation.Multiplier.text())
     if (multiplier == 0) { multiplier = 1 }
@@ -224,7 +225,7 @@ void parseCurrentSummation(summation) {
     state.summationDelivered = deliveredValue
     state.summationReceived = receivedValue
     state.summationTimestamp = dateString
-    
+
     if (state.energyStart) {
         // calculate energy
         def totalEnergy = deliveredValue - receivedValue - state.energyStart
@@ -283,7 +284,7 @@ private Integer convertHexToInt(hex) {
     return hex ? new BigInteger(hex[2..-1], 16) : 0
 }
 
-private String convertIPtoHex(ipAddress) { 
+private String convertIPtoHex(ipAddress) {
     String hex = ipAddress.tokenize( '.' ).collect {  String.format( '%02x', it.toInteger() ) }.join()
     return hex.toUpperCase()
 
@@ -299,11 +300,11 @@ private String utc2000ToDate(int seconds) {
 
 void disableLogging() {
 	log.info 'Logging disabled.'
-	device.updateSetting('loggingEnabled',[value:'false',type:'bool'])
+	device.updateSetting('logEnable',[value:'false',type:'bool'])
 }
 
 void logDebug(str) {
-    if (loggingEnabled) {
+    if (logEnable) {
         log.debug str
     }
 }

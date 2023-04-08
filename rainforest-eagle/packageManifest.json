@@ -1,10 +1,10 @@
 {
   "packageName": "Rainforest Eagle",
   "author": "Justin Walker (augoisms)",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minimumHEVersion": "2.2.0",
-  "dateReleased": "2021-03-28",
-  "releaseNotes": "Add support to reset energy daily, add secondary cloud provider (ahndee, 2021-03-14).",
+  "dateReleased": "2022-04-08",
+  "releaseNotes": "Rename preference to logEnable to align with native drivers.",
   "communityLink": "https://community.hubitat.com/t/release-rainforest-eagle/38883",
   "drivers": [
     {
