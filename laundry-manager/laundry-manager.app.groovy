@@ -19,6 +19,7 @@
  *  v1.0.6 - Added support for overriding machine labels (2021-01-21).
  *  v1.0.7 - Fix ttsModes bug (2021-03-21).
  *  v1.0.8 - Fix for finished to idle, added support for dishwasher (2021-08-29).
+ *  v1.0.9 - Fix for auto reset (2023-08-16).
  *
  */
 
@@ -73,37 +74,37 @@ def settings() {
         }
 
         section('<hr>') {
-            input name: 'loggingEnabled', type: 'bool', title: 'Enable Logging?', defaultValue: false
+            input name: 'logEnable', type: 'bool', title: 'Enable Logging?', defaultValue: false
             paragraph '<div><i>Automatically disables after 30 minutes.</i></div><br>'
         }
     }
 }
 
-def installed() {
+void installed() {
 	init()
 }
 
-def updated() {
+void updated() {
 	unsubscribe()
 	init()
 }
 
-def uninstalled() {
+void uninstalled() {
 	removeChildDevices(getChildDevices())
 }
 
 void init() {
     // disable logging in 30 minutes
-    if (loggingEnabled) runIn(1800, disableLogging)
+    if (logEnable) runIn(1800, disableLogging)
 
     // subscribe to device events
     washerMeter && subscribe(washerMeter, 'power', washerPowerHandler)
-    dryerMeter && subscribe(dryerMeter, 'power', dryerPowerHandler) 
+    dryerMeter && subscribe(dryerMeter, 'power', dryerPowerHandler)
     dishwasherMeter && subscribe(dishwasherMeter, 'power', dishwasherPowerHandler)
 
     resetButton && subscribe(resetButton, 'pushed', resetHandler)
     resetContacts && subscribe(resetContacts, 'contact', resetHandler)
-	 
+
     createChildren()
 }
 
@@ -113,7 +114,7 @@ void init() {
 
 void createChildren() {
     logDebug 'creating Laundry Manager children'
-    
+
     washerMeter && createChild('laundry-machine-washer', 'Laundry Washer')
     dryerMeter && createChild('laundry-machine-dryer', 'Laundry Dryer')
     dishwasherMeter && createChild('laundry-machine-dishwasher', 'Dishwasher')
@@ -135,16 +136,16 @@ void createChild(dni, label) {
         	log.warn 'error creating child device'
         	log.trace e
         }
-    	
-	}   
+
+	}
 }
 
-void subscribeToChild(child){    
+void subscribeToChild(child){
     if (child.deviceNetworkId == 'laundry-machine-washer') {
         subscribe(child, 'status', washerStatusHandler)
         washerPowerHandler()
     }
-    
+
     if (child.deviceNetworkId == 'laundry-machine-dryer') {
         subscribe(child, 'status', dryerStatusHandler)
         dryerPowerHandler()
@@ -166,28 +167,41 @@ void removeChildDevices(delete) {
 
 void resetHandler(evt) {
 	logDebug 'button pushed'
-    
+
+    resetHandlerWasher()
+    resetHandlerDryer()
+    resetHandlerDishwasher()
+}
+
+void resetHandlerWasher(evt) {
     def washer = getChildDevice('laundry-machine-washer')
     if(washer?.currentValue('status') == 'finished') {
     	logDebug 'resetting washer'
         washer.resetFinished()
     }
-    
+    unschedule('resetHandlerWasher')
+}
+
+void resetHandlerDryer(evt) {
     def dryer = getChildDevice('laundry-machine-dryer')
     if(dryer?.currentValue('status') == 'finished') {
     	logDebug 'resetting dryer'
         dryer.resetFinished()
     }
+    unschedule('resetHandlerDryer')
+}
 
+void resetHandlerDishwasher(evt) {
     def dishwasher = getChildDevice('laundry-machine-dishwasher')
     if(dishwasher?.currentValue('status') == 'finished') {
     	logDebug 'resetting dishwasher'
         dishwasher.resetFinished()
     }
+    unschedule('resetHandlerDishwasher')
 }
 
 void washerStatusHandler(evt) {
-	logDebug 'checking washer status'  
+	logDebug 'checking washer status'
     def washer = getChildDevice('laundry-machine-washer')
 
     // get machine label
@@ -196,11 +210,11 @@ void washerStatusHandler(evt) {
         name = labelWasher ?: name
     }
 
-    statusCheck(washer, name, 'washerStatusHandler')
+    statusCheck(washer, name, 'washerStatusHandler', 'resetHandlerWasher')
 }
 
 void dryerStatusHandler(evt) {
-	logDebug 'checking dryer status'   
+	logDebug 'checking dryer status'
     def dryer = getChildDevice('laundry-machine-dryer')
 
     // get machine label
@@ -208,12 +222,12 @@ void dryerStatusHandler(evt) {
     if (labelOverride) {
         name = labelDryer ?: name
     }
-    
-    statusCheck(dryer, name, 'dryerStatusHandler')
+
+    statusCheck(dryer, name, 'dryerStatusHandler', 'resetHandlerDryer')
 }
 
 void dishwasherStatusHandler(evt) {
-	logDebug 'checking dishwasher status'   
+	logDebug 'checking dishwasher status'
     def dishwasher = getChildDevice('laundry-machine-dishwasher')
 
     // get machine label
@@ -221,8 +235,8 @@ void dishwasherStatusHandler(evt) {
     if (labelOverride) {
         name = labelDishwasher ?: name
     }
-    
-    statusCheck(dishwasher, name, 'dishwasherStatusHandler')
+
+    statusCheck(dishwasher, name, 'dishwasherStatusHandler', 'resetHandlerDishwasher')
 }
 
 void washerPowerHandler(evt) {
@@ -249,11 +263,11 @@ void dishwasherPowerHandler(evt) {
 
 void disableLogging() {
 	log.info 'Logging disabled.'
-	app?.updateSetting('loggingEnabled',[value:'false',type:'bool'])
+	app?.updateSetting('logEnable',[value:'false',type:'bool'])
 }
 
 void logDebug(str) {
-    if (loggingEnabled) {
+    if (logEnable) {
         log.debug str
     }
 }
@@ -264,8 +278,8 @@ void send(msg) {
     // push notifications
     Boolean push = sendPushMessage == true || sendPushMessage == 'Yes'
     if (push && modeOkay) {
-		logDebug 'sending push message' 		
-        notificationDevices.each{ device -> 
+		logDebug 'sending push message'
+        notificationDevices.each{ device ->
             device.deviceNotification(msg)
         }
 	}
@@ -277,13 +291,13 @@ void send(msg) {
             device.speak(msg)
         }
     }
-    
+
     logDebug msg
 }
 
-void statusCheck(device, deviceName, handlerName) {
+void statusCheck(device, deviceName, statusHandlerName, resetHandlerName) {
 	def status = device.currentValue('status')
-  
+
     if (status == 'finished') {
     	// send notification
         send("${deviceName} is finished")
@@ -291,12 +305,12 @@ void statusCheck(device, deviceName, handlerName) {
         // schedule repeat notification
         if(repeat) {
         	logDebug 'scheduling a repeat notification'
-            runIn(repeatInterval * 60, handlerName)
+            runIn(repeatInterval * 60, statusHandlerName)
         }
 
         // auto reset
         if (resetAuto) {
-            runIn((resetAutoTime ?: 60) * 60, resetHandler)
+            runIn((resetAutoTime ?: 60) * 60, resetHandlerName, [overwrite: false])
         }
     }
 }
