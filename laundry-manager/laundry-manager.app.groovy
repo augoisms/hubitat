@@ -10,16 +10,17 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  *
- *  v1.0.0 - Initial version
- *  v1.0.1 - Made washer, dryer, and reset button optional
- *  v1.0.2 - Allow multiple notification devices
- *  v1.0.3 - Added support for contact sensors, TTS, time-based auto reset, and device labels (2021-01-17).
- *  v1.0.4 - Bug fix (2021-01-18).
- *  v1.0.5 - More bug fixes (2021-01-18).
- *  v1.0.6 - Added support for overriding machine labels (2021-01-21).
- *  v1.0.7 - Fix ttsModes bug (2021-03-21).
- *  v1.0.8 - Fix for finished to idle, added support for dishwasher (2021-08-29).
- *  v1.0.9 - Fix for auto reset (2023-08-16).
+ *  v1.0.0  - Initial version
+ *  v1.0.1  - Made washer, dryer, and reset button optional
+ *  v1.0.2  - Allow multiple notification devices
+ *  v1.0.3  - Added support for contact sensors, TTS, time-based auto reset, and device labels (2021-01-17).
+ *  v1.0.4  - Bug fix (2021-01-18).
+ *  v1.0.5  - More bug fixes (2021-01-18).
+ *  v1.0.6  - Added support for overriding machine labels (2021-01-21).
+ *  v1.0.7  - Fix ttsModes bug (2021-03-21).
+ *  v1.0.8  - Fix for finished to idle, added support for dishwasher (2021-08-29).
+ *  v1.0.9  - Fix for auto reset (2023-08-16).
+ *  v1.0.10 - Fix for repeat notifications toggle (2023-09-28).
  *
  */
 
@@ -60,7 +61,7 @@ def settings() {
             if (sendTTS) input 'ttsDevices', 'capability.speechSynthesis', title: 'Choose speaker(s)', required: false, multiple: true
 
             if (sendPushMessage || sendTTS) {
-                input 'repeat', 'bool', title: 'Repeat notifications?'
+                input 'repeat', 'bool', title: 'Repeat notifications?', defaultValue: false, submitOnChange: true
                 if (repeat) input 'repeatInterval', 'number', title: 'Repeat interval (minutes)', defaultValue: 15, submitOnChange: true
                 input 'modes', 'mode', title: 'Only send notifications in specific modes', multiple: true, required: false
             }

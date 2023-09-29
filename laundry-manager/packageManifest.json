@@ -1,10 +1,10 @@
 {
   "packageName": "Laundry Manager",
   "author": "Justin Walker (augoisms)",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "minimumHEVersion": "2.2.0",
   "dateReleased": "2023-08-16",
-  "releaseNotes": "Fix for auto reset (2023-08-16).",
+  "releaseNotes": "Fix for repeat notifications toggle (2023-09-28).",
   "communityLink": "https://community.hubitat.com/t/release-laundry-manager/30614",
   "drivers": [
     {
